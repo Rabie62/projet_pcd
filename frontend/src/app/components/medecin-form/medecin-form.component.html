@@ -1,0 +1,66 @@
+<div class="modal-overlay">
+  <div class="glass-panel" style="width: 500px; max-width: 100%; margin: auto; max-height: min-content; box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 20px var(--glass-glow);">
+    <div class="card-header" style="justify-content: space-between;">
+      <h2 style="display: flex; align-items: center; gap: 0.5rem;">
+        <lucide-icon [name]="UserPlusIcon" [size]="20" class="text-primary"></lucide-icon>
+        {{ isEdit ? 'Modifier Médecin' : 'Ajouter Médecin' }}
+      </h2>
+      <button (click)="close.emit()" style="background: transparent; padding: 0.5rem; border: none; cursor: pointer;">
+        <lucide-icon [name]="XIcon" [size]="20" class="text-muted"></lucide-icon>
+      </button>
+    </div>
+    <div class="card-body">
+      <form (submit)="handleSubmit($event)" style="display: flex; flex-direction: column; gap: 1rem;">
+
+        <!-- Prénom & Nom -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Prénom *</label>
+            <input type="text" [(ngModel)]="formData.prenom" name="prenom" required autoComplete="off" />
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Nom *</label>
+            <input type="text" [(ngModel)]="formData.nom" name="nom" required autoComplete="off" />
+          </div>
+        </div>
+
+        <!-- Spécialité & Département -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Spécialité</label>
+            <input type="text" [(ngModel)]="formData.specialite" name="specialite" placeholder="ex: Neurologie" />
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Département</label>
+            <input type="text" [(ngModel)]="formData.departement" name="departement" placeholder="ex: Radiologie" />
+          </div>
+        </div>
+
+        <!-- Téléphone & Email -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Téléphone</label>
+            <input type="tel" [(ngModel)]="formData.tel" name="tel" autoComplete="off" />
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Email</label>
+            <input type="email" [(ngModel)]="formData.email" name="email" autoComplete="off" />
+          </div>
+        </div>
+
+        <div *ngIf="error" style="color: var(--danger); font-size: 0.85rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px; border-left: 3px solid var(--danger);">
+          {{ error }}
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">
+          <button type="button" (click)="close.emit()" style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">
+            Annuler
+          </button>
+          <button type="submit" [disabled]="loading">
+            <lucide-icon [name]="SaveIcon" [size]="18"></lucide-icon> {{ loading ? 'Enregistrement...' : 'Valider' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

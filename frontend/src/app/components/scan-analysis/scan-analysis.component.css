@@ -1,0 +1,25 @@
+.tab-bar button {
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.tab-bar button:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.tab-bar button.active {
+  background: var(--primary) !important;
+  color: white;
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+}
+
+.spinner {
+  animation: rotate 2s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,39 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Model weights
+models/pretrained/*.pth
+models/pretrained/*.pt
+models/pretrained/*.onnx
+models/pretrained/*.bin
+
+# Data
+data/brats/
+*.nii
+*.nii.gz
+
+# Logs
+logs/
+*.log
+
+# Outputs
+outputs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env

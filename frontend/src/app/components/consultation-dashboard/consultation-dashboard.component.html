@@ -1,0 +1,115 @@
+<app-consultation-form
+  *ngIf="showForm"
+  [patients]="patients"
+  [medecins]="medecins"
+  (close)="handleFormClose()"
+  (saved)="handleFormSaved()">
+</app-consultation-form>
+
+<app-consultation-detail
+  *ngIf="selectedConsultation"
+  [consultation]="selectedConsultation"
+  (close)="closeDetail()">
+</app-consultation-detail>
+
+<div class="glass-panel" style="display: flex; flex-direction: column; height: 100%;">
+  <div class="card-header">
+    <h2>Gestion Consultations</h2>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+      <!-- Filter par patient -->
+      <select [(ngModel)]="filterPatient" (ngModelChange)="onPatientFilterChange()" style="width: 200px; padding: 0.6rem 1rem;">
+        <option value="">Tous les patients</option>
+        <option *ngFor="let p of patients" [value]="p.id">{{ p.prenom }} {{ p.nom }} (ID: {{ p.id }})</option>
+      </select>
+
+      <!-- Filter par statut -->
+      <select [(ngModel)]="filterStatut" style="width: 150px; padding: 0.6rem 1rem;">
+        <option value="">Tous les statuts</option>
+        <option value="en_cours">En cours</option>
+        <option value="terminee">Terminée</option>
+        <option value="annulee">Annulée</option>
+      </select>
+
+      <div style="position: relative; width: 220px;">
+        <lucide-icon [name]="SearchIcon" [size]="16"
+          style="position: absolute; top: 12px; left: 12px; color: var(--text-muted);"></lucide-icon>
+        <input type="text" placeholder="Rechercher..." style="padding-left: 2.5rem;"
+          [(ngModel)]="searchQuery" />
+      </div>
+
+      <button (click)="handleRemoveSelected()" [disabled]="selectedIds.size === 0 || loading" class="danger"
+        [style.background]="selectedIds.size > 0 ? 'var(--danger)' : 'transparent'"
+        [style.border]="selectedIds.size > 0 ? 'none' : '1px solid var(--glass-border)'"
+        [style.color]="selectedIds.size > 0 ? '#fff' : 'var(--text-muted)'"
+        [style.opacity]="selectedIds.size > 0 ? 1 : 0.5">
+        <lucide-icon [name]="Trash2Icon" [size]="16"></lucide-icon> Supprimer
+      </button>
+
+      <button (click)="openAddForm()" [disabled]="loading">
+        <lucide-icon [name]="PlusIcon" [size]="16"></lucide-icon> Nouvelle Consultation
+      </button>
+    </div>
+  </div>
+  <div class="card-body" style="flex: 1;">
+    <div *ngIf="loading && consultations.length === 0" class="text-muted">Chargement des consultations...</div>
+
+    <table *ngIf="!(loading && consultations.length === 0)"
+      style="width: 100%; border-collapse: collapse; text-align: left;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--glass-border);">
+          <th style="padding: 1rem 0.5rem; width: 40px;">
+            <input type="checkbox" [checked]="isSelectedAll()" (change)="toggleSelectAll()"
+              style="width: 18px; height: 18px; cursor: pointer;" />
+          </th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">ID</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Date</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Patient</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Médecin</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Motif</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Diagnostic</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Statut</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Détails</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let c of filteredConsultations"
+          style="border-bottom: 1px solid var(--glass-border); transition: background 0.2s;"
+          [style.background]="selectedIds.has(c.id) ? 'rgba(56, 189, 248, 0.05)' : 'transparent'">
+          <td style="padding: 0.75rem 0.5rem;" (click)="toggleSelect(c.id, $event)">
+            <input type="checkbox" [checked]="selectedIds.has(c.id)" (change)="toggleSelect(c.id)"
+              style="width: 18px; height: 18px; cursor: pointer;" />
+          </td>
+          <td style="padding: 0.75rem 0.5rem; font-weight: 500;">{{ c.id }}</td>
+          <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem; white-space: nowrap;">{{ formatDateTime(c.date_consultation) }}</td>
+          <td style="padding: 0.75rem 0.5rem;">{{ c.patient_prenom }} {{ c.patient_nom }}</td>
+          <td style="padding: 0.75rem 0.5rem;">Dr. {{ c.medecin_prenom }} {{ c.medecin_nom }}</td>
+          <td style="padding: 0.75rem 0.5rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" [title]="c.motif">
+            {{ c.motif || '—' }}
+          </td>
+          <td style="padding: 0.75rem 0.5rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" [title]="c.diagnostic">
+            {{ c.diagnostic || '—' }}
+          </td>
+          <td style="padding: 0.75rem 0.5rem;">
+            <span class="badge" [ngClass]="getStatutClass(c.statut)">{{ getStatutLabel(c.statut) }}</span>
+          </td>
+          <td style="padding: 0.75rem 0.5rem;">
+            <button (click)="viewDetail(c)"
+              style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: var(--primary); padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+              <lucide-icon [name]="EyeIcon" [size]="14"></lucide-icon> Voir
+            </button>
+          </td>
+        </tr>
+        <tr *ngIf="consultations.length === 0">
+          <td colspan="9" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            Aucune consultation enregistrée. Cliquez sur 'Nouvelle Consultation' pour en créer une.
+          </td>
+        </tr>
+        <tr *ngIf="consultations.length > 0 && filteredConsultations.length === 0">
+          <td colspan="9" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            Aucune consultation ne correspond à vos critères.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

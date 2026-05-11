@@ -1,0 +1,39 @@
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <lucide-icon [name]="ActivityIcon" class="text-primary"></lucide-icon>
+      <span>Medical AI Hub</span>
+    </div>
+    <nav style="display: flex; flex-direction: column; gap: 0.5rem;">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="sidebar-link">
+        <lucide-icon [name]="UsersIcon"></lucide-icon>
+        <span>Gestion Patients</span>
+      </a>
+      <a routerLink="/medecins" routerLinkActive="active" class="sidebar-link">
+        <lucide-icon [name]="StethoscopeIcon"></lucide-icon>
+        <span>Gestion Médecins</span>
+      </a>
+      <a routerLink="/consultations" routerLinkActive="active" class="sidebar-link">
+        <lucide-icon [name]="ClipboardListIcon"></lucide-icon>
+        <span>Gestion Consultations</span>
+      </a>
+      <a routerLink="/analysis" routerLinkActive="active" class="sidebar-link">
+        <lucide-icon [name]="FileSearchIcon"></lucide-icon>
+        <span>Gestion Examens</span>
+      </a>
+      <a routerLink="/chat" routerLinkActive="active" class="sidebar-link">
+        <lucide-icon [name]="MessageSquareIcon"></lucide-icon>
+        <span>Dialogue Agent</span>
+      </a>
+      <a routerLink="/knowledge" routerLinkActive="active" class="sidebar-link">
+        <lucide-icon [name]="DatabaseIcon"></lucide-icon>
+        <span>RAG Knowledge Base</span>
+      </a>
+    </nav>
+  </aside>
+  <main class="main-content">
+    <div class="page-container">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

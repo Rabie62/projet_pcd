@@ -1,0 +1,137 @@
+<div class="grid-2" style="height: calc(100vh - 4rem);">
+  <!-- Input & Report Panel -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem; height: 100%;">
+    <div class="glass-panel">
+      <div class="card-body">
+        <h2 style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 2rem;">
+          <lucide-icon [name]="BrainIcon" class="text-primary" [size]="24"></lucide-icon> Gestion Examens
+        </h2>
+
+        <div class="form-group" style="margin-top: 1rem;">
+          <label style="display: block; margin-bottom: 1rem;">ID Patient *</label>
+          <input
+            type="number"
+            [(ngModel)]="patientId"
+            [disabled]="loading"
+            placeholder="Entrez l'ID du patient..."
+          />
+        </div>
+
+        <div *ngIf="!file"
+             (dragover)="handleDragOver($event)"
+             (dragleave)="handleDragLeave($event)"
+             (drop)="handleDrop($event)"
+             (click)="fileInput.click()"
+             [style.border]="isDragging ? '2px dashed var(--primary)' : '2px dashed var(--glass-border)'"
+             style="border-radius: 12px; padding: 3rem 2rem; margin-top: 1rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; cursor: pointer; transition: all 0.2s ease;"
+             [style.background]="isDragging ? 'rgba(56, 189, 248, 0.05)' : 'rgba(0,0,0,0.2)'">
+          <input #fileInput type="file" (change)="handleFileChange($event)" accept=".jpg,.jpeg,.png" style="display: none;" />
+          <div [style.color]="isDragging ? 'var(--primary)' : 'var(--text-muted)'" style="padding: 1rem; background: var(--bg-dark); border-radius: 50%;">
+            <lucide-icon [name]="UploadCloudIcon" [size]="32"></lucide-icon>
+          </div>
+          <div style="text-align: center;">
+            <p style="font-weight: 600; margin: 0 0 0.5rem 0;">Glisser & Déposer l'image (JPG, PNG)</p>
+            <p class="text-muted" style="font-size: 0.9rem; margin: 0;">ou cliquez pour parcourir les fichiers</p>
+          </div>
+        </div>
+
+        <div *ngIf="file" style="margin-top: 1rem; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); padding: 1rem; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 1rem; overflow: hidden;">
+            <div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 8px;">
+              <lucide-icon [name]="FileImageIcon" class="text-primary" [size]="24"></lucide-icon>
+            </div>
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              <p style="font-weight: 500; margin: 0 0 0.25rem 0;">{{ file.name }}</p>
+              <p class="text-muted" style="font-size: 0.8rem; margin: 0;">{{ getMathSize(file.size) }} MB</p>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <button (click)="clearFile()" [disabled]="loading" style="background: transparent; padding: 0.5rem; border: 1px solid var(--glass-border);">
+              <lucide-icon [name]="XIcon" class="text-muted" [size]="18"></lucide-icon>
+            </button>
+            <button (click)="handleAnalyze()" [disabled]="loading">
+              <lucide-icon [name]="PlayIcon" [size]="18"></lucide-icon> {{ loading ? 'Analyse en cours...' : 'Analyser' }}
+            </button>
+          </div>
+        </div>
+
+        <div *ngIf="error" style="color: var(--danger); margin-top: 1rem; padding: 1rem; background: rgba(239,68,68,0.1); border-radius: 8px;">
+          {{ error }}
+        </div>
+      </div>
+    </div>
+
+    <div *ngIf="result" class="glass-panel" style="flex: 1; overflow-y: auto;">
+      <div class="card-header">
+        <h2>Rapport de Diagnostic - Patient {{ result.patient_id }}</h2>
+        <span [class]="'badge ' + (result.tumor_detected ? 'warning' : 'safe')">
+          {{ result.tumor_detected ? 'ANOMALIE DÉTECTÉE' : 'AUCUNE ANOMALIE' }}
+        </span>
+      </div>
+      <div class="card-body" style="display: flex; flex-direction: column; gap: 1.5rem;">
+        <div *ngIf="result.tumor_detected" style="padding: 1rem; background: rgba(56, 189, 248, 0.1); border-radius: 8px; border: 1px solid var(--primary);">
+          <h3 class="text-primary" style="margin: 0;">Classification: {{ result.classification }}</h3>
+          <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem;">
+            Confiance: {{ (result.classification_confidence * 100) | number:'1.1-1' }}% | Grade WHO: {{ result.who_grade }}
+          </div>
+          <div *ngIf="result.tumor_features" style="margin-top: 1rem; display: flex; gap: 1rem;">
+            <div><strong>Surface:</strong> {{ result.tumor_features.tumor_area_mm2 | number:'1.1-1' }} mm²</div>
+            <div><strong>Diamètre Max:</strong> {{ result.tumor_features.max_diameter_mm | number:'1.1-1' }} mm</div>
+          </div>
+        </div>
+
+        <div>
+          <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Résumé Clinique</h3>
+          <p style="line-height: 1.6; color: var(--text-main); white-space: pre-wrap;">{{ result.clinical_summary }}</p>
+        </div>
+
+        <div *ngIf="result.safety_check" [style.background]="result.safety_check.passed ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'" style="margin-top: 1rem; padding: 1rem; border-radius: 8px;">
+          <h3 style="font-size: 1rem; display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem 0;">
+            <lucide-icon *ngIf="result.safety_check.passed" [name]="CheckCircleIcon" [size]="18" color="var(--success)"></lucide-icon>
+            <lucide-icon *ngIf="!result.safety_check.passed" [name]="AlertTriangleIcon" [size]="18" color="var(--danger)"></lucide-icon>
+            Audit de Sécurité
+          </h3>
+          <ul style="margin: 0; padding-left: 1.5rem; color: var(--text-muted);">
+            <li *ngFor="let flag of result.safety_check.flags">{{ flag }}</li>
+            <li *ngIf="result.safety_check.flags.length === 0">Audit passé avec succès. Aucune anomalie détectée.</li>
+          </ul>
+          <div *ngIf="result.safety_check.requires_human_review" style="margin-top: 0.5rem; font-weight: bold; color: var(--danger);">
+            ⚠️ EXAMEN HUMAIN OBLIGATOIRE REQUIS
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visual Overlay Panel -->
+  <div class="glass-panel" style="height: 100%; display: flex; flex-direction: column;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <h2 style="margin: 0;">Analyse Visuelle</h2>
+    </div>
+    
+    <div class="card-body" style="flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 1rem;">
+      
+      <div *ngIf="loading" class="text-muted" style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+        <div class="spinner"><lucide-icon [name]="ActivityIcon" [size]="48"></lucide-icon></div>
+        Analyse 2D en cours...
+      </div>
+
+      <div *ngIf="!loading && result" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+        <img [src]="getSummaryUrl()"
+             alt="MRI Analysis"
+             style="max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); object-fit: contain;"
+        />
+      </div>
+
+      <img *ngIf="!loading && !result && previewUrl"
+           [src]="previewUrl"
+           alt="Preview"
+           style="max-width: 100%; max-height: 600px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0.7;"
+      />
+
+      <div *ngIf="!loading && !result && !previewUrl" class="text-muted">En attente d'une image (JPG, PNG)</div>
+
+    </div>
+  </div>
+
+</div>

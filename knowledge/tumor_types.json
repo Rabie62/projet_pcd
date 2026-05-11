@@ -1,0 +1,78 @@
+{
+    "version": "2.0-BrainTumor",
+    "source": "Masoud Nickparvar Brain Tumor MRI Dataset / WHO CNS5 Classification 2021",
+    "dataset": "Brain Tumor MRI Dataset (Masoud Nickparvar)",
+    "classes": ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
+    "tumor_types": {
+        "glioma": {
+            "who_grade": "II-IV",
+            "aliases": [
+                "Glioblastoma",
+                "Astrocytoma",
+                "Oligodendroglioma"
+            ],
+            "category": "Glioma",
+            "typical_mri_features": {
+                "t1": "Variable signal intensity depending on grade"
+            },
+            "key_features": [
+                "Most common primary brain tumor",
+                "Range from low-grade (II) to high-grade (IV/GBM)",
+                "Irregular borders common in high-grade",
+                "May show heterogeneous signal on T1"
+            ],
+            "prognosis": "Varies widely: Grade II 5-10 years, Grade IV 14-16 months"
+        },
+        "meningioma": {
+            "who_grade": "I-III",
+            "aliases": [],
+            "category": "Meningioma",
+            "typical_mri_features": {
+                "t1": "Isointense to slightly hyperintense, well-circumscribed"
+            },
+            "key_features": [
+                "Extra-axial location",
+                "Homogeneous appearance",
+                "Dural tail sign on contrast studies",
+                "Well-circumscribed borders",
+                "Most are benign (WHO Grade I)"
+            ],
+            "prognosis": "Generally excellent, most are benign and surgically curable"
+        },
+        "pituitary": {
+            "who_grade": "N/A (adenoma)",
+            "aliases": [
+                "Pituitary adenoma",
+                "Pituitary tumor"
+            ],
+            "category": "Pituitary",
+            "typical_mri_features": {
+                "t1": "Sellar/suprasellar mass, variable signal intensity"
+            },
+            "key_features": [
+                "Located in sella turcica",
+                "May compress optic chiasm",
+                "Can be functional (hormone-secreting) or non-functional",
+                "Microadenoma (<10mm) vs macroadenoma (≥10mm)"
+            ],
+            "prognosis": "Generally benign, treatment depends on hormone status and size"
+        },
+        "no_tumor": {
+            "who_grade": "N/A",
+            "aliases": [
+                "Normal",
+                "Healthy"
+            ],
+            "category": "No Tumor",
+            "typical_mri_features": {
+                "t1": "Normal brain parenchyma signal"
+            },
+            "key_features": [
+                "No space-occupying lesion",
+                "Normal ventricles and sulci",
+                "Symmetric appearance"
+            ],
+            "prognosis": "N/A — no pathology detected"
+        }
+    }
+}

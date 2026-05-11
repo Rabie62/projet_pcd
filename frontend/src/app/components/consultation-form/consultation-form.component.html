@@ -1,0 +1,78 @@
+<div class="modal-overlay">
+  <div class="glass-panel" style="width: 600px; max-width: 100%; margin: auto; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 20px var(--glass-glow);">
+    <div class="card-header" style="justify-content: space-between;">
+      <h2 style="display: flex; align-items: center; gap: 0.5rem;">
+        <lucide-icon [name]="ClipboardListIcon" [size]="20" class="text-primary"></lucide-icon>
+        Nouvelle Consultation
+      </h2>
+      <button (click)="close.emit()" style="background: transparent; padding: 0.5rem; border: none; cursor: pointer;">
+        <lucide-icon [name]="XIcon" [size]="20" class="text-muted"></lucide-icon>
+      </button>
+    </div>
+    <div class="card-body">
+      <form (submit)="handleSubmit($event)" style="display: flex; flex-direction: column; gap: 1rem;">
+
+        <!-- Patient & Médecin -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Patient *</label>
+            <select [(ngModel)]="formData.patient_id" name="patient_id" required>
+              <option value="">-- Sélectionner --</option>
+              <option *ngFor="let p of patients" [value]="p.id">{{ p.prenom }} {{ p.nom }} (ID: {{ p.id }})</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Médecin *</label>
+            <select [(ngModel)]="formData.medecin_id" name="medecin_id" required>
+              <option value="">-- Sélectionner --</option>
+              <option *ngFor="let m of medecins" [value]="m.id">Dr. {{ m.prenom }} {{ m.nom }} — {{ m.specialite || 'N/A' }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Motif -->
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Motif de Consultation</label>
+          <input type="text" [(ngModel)]="formData.motif" name="motif" placeholder="ex: Contrôle post-opératoire, Céphalées..." />
+        </div>
+
+        <!-- Diagnostic -->
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Diagnostic</label>
+          <textarea [(ngModel)]="formData.diagnostic" name="diagnostic" rows="3"
+            placeholder="Diagnostic posé lors de la consultation..." style="resize: vertical;"></textarea>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Notes Complémentaires</label>
+          <textarea [(ngModel)]="formData.notes" name="notes" rows="3"
+            placeholder="Observations, recommandations..." style="resize: vertical;"></textarea>
+        </div>
+
+        <!-- Statut -->
+        <div class="form-group">
+          <label style="display: block; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 500;">Statut</label>
+          <select [(ngModel)]="formData.statut" name="statut">
+            <option value="en_cours">En cours</option>
+            <option value="terminee">Terminée</option>
+            <option value="annulee">Annulée</option>
+          </select>
+        </div>
+
+        <div *ngIf="error" style="color: var(--danger); font-size: 0.85rem; padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px; border-left: 3px solid var(--danger);">
+          {{ error }}
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">
+          <button type="button" (click)="close.emit()" style="background: transparent; border: 1px solid var(--glass-border); color: var(--text-muted);">
+            Annuler
+          </button>
+          <button type="submit" [disabled]="loading">
+            <lucide-icon [name]="SaveIcon" [size]="18"></lucide-icon> {{ loading ? 'Enregistrement...' : 'Créer Consultation' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

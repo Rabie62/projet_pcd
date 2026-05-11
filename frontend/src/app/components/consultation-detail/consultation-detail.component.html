@@ -1,0 +1,90 @@
+<div class="modal-overlay">
+  <div class="glass-panel" style="width: 800px; max-width: 95vw; margin: auto; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 20px var(--glass-glow);">
+    <div class="card-header" style="justify-content: space-between;">
+      <h2 style="display: flex; align-items: center; gap: 0.5rem;">
+        <lucide-icon [name]="ClipboardListIcon" [size]="20" class="text-primary"></lucide-icon>
+        <span style="font-size: 1.25rem; font-weight: 700;">Consultation</span>
+        <span style="font-size: 1.25rem; font-weight: 400; color: var(--text-muted);">#{{ fullDetail?.id || consultation?.id }}</span>
+      </h2>
+      <button (click)="close.emit()" style="background: transparent; padding: 0.5rem; border: none; cursor: pointer;">
+        <lucide-icon [name]="XIcon" [size]="20" class="text-muted"></lucide-icon>
+      </button>
+    </div>
+    <div class="card-body">
+      <div *ngIf="loading" class="text-muted" style="text-align: center; padding: 2rem;">
+        Chargement des détails...
+      </div>
+
+      <div *ngIf="!loading && fullDetail" style="display: flex; flex-direction: column; gap: 1.5rem;">
+
+        <!-- Info Header -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">
+              <lucide-icon [name]="CalendarIcon" [size]="14" style="vertical-align: middle; margin-right: 4px;"></lucide-icon> Date
+            </div>
+            <div style="font-weight: 500;">{{ formatDateTime(fullDetail.date_consultation) }}</div>
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">
+              <lucide-icon [name]="UserIcon" [size]="14" style="vertical-align: middle; margin-right: 4px;"></lucide-icon> Statut
+            </div>
+            <span class="badge" [ngClass]="getStatutClass(fullDetail.statut)">{{ getStatutLabel(fullDetail.statut) }}</span>
+          </div>
+        </div>
+
+        <!-- Patient & Médecin -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.75rem;">
+              👤 Patient
+            </div>
+            <div style="font-weight: 600; font-size: 1.1rem;">{{ fullDetail.patient_prenom }} {{ fullDetail.patient_nom }}</div>
+            <div class="text-muted" style="font-size: 0.85rem;">ID: {{ fullDetail.patient_id }}</div>
+          </div>
+          <div style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.75rem;">
+              🩺 Médecin
+            </div>
+            <div style="font-weight: 600; font-size: 1.1rem;">Dr. {{ fullDetail.medecin_prenom }} {{ fullDetail.medecin_nom }}</div>
+            <div *ngIf="fullDetail.medecin_specialite" class="text-muted" style="font-size: 0.85rem;">{{ fullDetail.medecin_specialite }}</div>
+          </div>
+        </div>
+
+        <!-- Motif -->
+        <div *ngIf="fullDetail.motif" style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">
+            📋 Motif de Consultation
+          </div>
+          <div>{{ fullDetail.motif }}</div>
+        </div>
+
+        <!-- Diagnostic -->
+        <div *ngIf="fullDetail.diagnostic" style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">
+            🔬 Diagnostic
+          </div>
+          <div style="white-space: pre-wrap;">{{ fullDetail.diagnostic }}</div>
+        </div>
+
+        <!-- Notes -->
+        <div *ngIf="fullDetail.notes" style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem;">
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">
+            📝 Notes Complémentaires
+          </div>
+          <div style="white-space: pre-wrap;">{{ fullDetail.notes }}</div>
+        </div>
+
+        <!-- Rapport Généré -->
+        <div *ngIf="fullDetail.rapport_genere" style="background: rgba(15, 23, 42, 0.5); border-radius: 8px; padding: 1rem; border: 1px solid rgba(56, 189, 248, 0.2);">
+          <div style="font-size: 0.75rem; color: var(--primary); text-transform: uppercase; font-weight: 600; margin-bottom: 0.5rem;">
+            <lucide-icon [name]="FileTextIcon" [size]="14" style="vertical-align: middle; margin-right: 4px;"></lucide-icon>
+            Rapport Généré
+          </div>
+          <div style="white-space: pre-wrap; font-family: monospace; font-size: 0.85rem; line-height: 1.6; max-height: 300px; overflow-y: auto;">{{ fullDetail.rapport_genere }}</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

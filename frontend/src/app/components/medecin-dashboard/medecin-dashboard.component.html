@@ -1,0 +1,95 @@
+<app-medecin-form
+  *ngIf="showForm"
+  [medecin]="editingMedecin"
+  (close)="handleFormClose()"
+  (saved)="handleFormSaved()">
+</app-medecin-form>
+
+<div class="glass-panel" style="display: flex; flex-direction: column; height: 100%;">
+  <div class="card-header">
+    <h2>Gestion Médecins</h2>
+    <div style="display: flex; gap: 1rem;">
+      <div style="position: relative; width: 250px;">
+        <lucide-icon [name]="SearchIcon" [size]="16"
+          style="position: absolute; top: 12px; left: 12px; color: var(--text-muted);"></lucide-icon>
+        <input type="text" placeholder="Rechercher par Nom, Spécialité..." style="padding-left: 2.5rem;"
+          [(ngModel)]="searchQuery" />
+      </div>
+
+      <button (click)="handleRemoveSelected()" [disabled]="selectedIds.size === 0 || loading" class="danger"
+        [style.background]="selectedIds.size > 0 ? 'var(--danger)' : 'transparent'"
+        [style.border]="selectedIds.size > 0 ? 'none' : '1px solid var(--glass-border)'"
+        [style.color]="selectedIds.size > 0 ? '#fff' : 'var(--text-muted)'"
+        [style.opacity]="selectedIds.size > 0 ? 1 : 0.5">
+        <lucide-icon [name]="Trash2Icon" [size]="16"></lucide-icon> Supprimer
+      </button>
+
+      <button (click)="openAddForm()" [disabled]="loading">
+        <lucide-icon [name]="PlusIcon" [size]="16"></lucide-icon> Nouveau Médecin
+      </button>
+    </div>
+  </div>
+  <div class="card-body" style="flex: 1;">
+    <div *ngIf="loading && medecins.length === 0" class="text-muted">Chargement de la base de données...</div>
+
+    <table *ngIf="!(loading && medecins.length === 0)"
+      style="width: 100%; border-collapse: collapse; text-align: left;">
+      <thead>
+        <tr style="border-bottom: 1px solid var(--glass-border);">
+          <th style="padding: 1rem 0.5rem; width: 40px;">
+            <input type="checkbox" [checked]="isSelectedAll()" (change)="toggleSelectAll()"
+              style="width: 18px; height: 18px; cursor: pointer;" />
+          </th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">ID</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Nom Complet</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Spécialité</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Département</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Contact</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Consultations</th>
+          <th style="padding: 1rem 0.5rem; color: var(--text-muted);">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let m of filteredMedecins"
+          style="border-bottom: 1px solid var(--glass-border); transition: background 0.2s; cursor: pointer;"
+          [style.background]="selectedIds.has(m.id) ? 'rgba(56, 189, 248, 0.05)' : 'transparent'">
+          <td style="padding: 1rem 0.5rem;" (click)="toggleSelect(m.id, $event)">
+            <input type="checkbox" [checked]="selectedIds.has(m.id)" (change)="toggleSelect(m.id)"
+              style="width: 18px; height: 18px; cursor: pointer;" />
+          </td>
+          <td style="padding: 1rem 0.5rem; font-weight: 500;">{{ m.id }}</td>
+          <td style="padding: 1rem 0.5rem;">Dr. {{ m.prenom }} {{ m.nom }}</td>
+          <td style="padding: 1rem 0.5rem;">
+            <span *ngIf="m.specialite" class="badge safe">{{ m.specialite }}</span>
+            <span *ngIf="!m.specialite" class="text-muted">—</span>
+          </td>
+          <td style="padding: 1rem 0.5rem;">{{ m.departement || '—' }}</td>
+          <td style="padding: 1rem 0.5rem; font-size: 0.85rem;">
+            <div *ngIf="m.tel || m.email" style="display: flex; flex-direction: column; gap: 0.25rem;">
+              <span *ngIf="m.tel" class="text-muted">📞 {{ m.tel }}</span>
+              <span *ngIf="m.email" class="text-muted">✉️ {{ m.email }}</span>
+            </div>
+            <span *ngIf="!m.tel && !m.email" class="text-muted">—</span>
+          </td>
+          <td style="padding: 1rem 0.5rem;"><span class="badge safe">{{ m.consultation_count }}</span></td>
+          <td style="padding: 1rem 0.5rem;">
+            <button (click)="openEditForm(m, $event)"
+              style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); color: var(--primary); padding: 0.4rem 0.75rem; font-size: 0.8rem;">
+              <lucide-icon [name]="Edit3Icon" [size]="14"></lucide-icon> Modifier
+            </button>
+          </td>
+        </tr>
+        <tr *ngIf="medecins.length === 0">
+          <td colspan="8" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            Aucun médecin enregistré. Cliquez sur 'Nouveau Médecin' pour en ajouter un.
+          </td>
+        </tr>
+        <tr *ngIf="medecins.length > 0 && filteredMedecins.length === 0">
+          <td colspan="8" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+            Aucun médecin ne correspond à "{{ searchQuery }}".
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

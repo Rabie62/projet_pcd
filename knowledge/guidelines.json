@@ -1,0 +1,88 @@
+{
+    "version": "2.0-BrainTumor",
+    "sources": [
+        "WHO CNS5 2021",
+        "NCCN Guidelines v2.2024",
+        "FDA Guidance for AI/ML-Based SaMD",
+        "Masoud Nickparvar Brain Tumor MRI Dataset"
+    ],
+    "brain_tumor_grading": {
+        "Glioma": {
+            "description": "Glial tumors ranging from low-grade (II) to high-grade (IV/GBM)",
+            "typical_features": {
+                "growth_rate": "Variable (slow to rapid depending on grade)",
+                "appearance": "Variable signal on T1-weighted MRI",
+                "borders": "Irregular in high-grade, better defined in low-grade",
+                "treatment": "Surgery, radiation, and/or chemotherapy depending on grade"
+            },
+            "molecular_markers": [
+                "IDH mutation",
+                "1p/19q codeletion",
+                "MGMT promoter methylation"
+            ]
+        },
+        "Meningioma": {
+            "description": "Extra-axial tumors arising from meninges, usually benign",
+            "typical_features": {
+                "growth_rate": "Slow",
+                "appearance": "Well-circumscribed, homogeneous on T1",
+                "borders": "Well-defined, dural-based",
+                "treatment": "Observation or surgical resection"
+            }
+        },
+        "Pituitary": {
+            "description": "Adenomas of the pituitary gland",
+            "typical_features": {
+                "growth_rate": "Slow",
+                "appearance": "Sellar mass, variable T1 signal",
+                "borders": "Usually well-defined",
+                "treatment": "Medical therapy, surgery, or radiation depending on type"
+            }
+        },
+        "No_Tumor": {
+            "description": "Normal brain appearance with no pathological findings"
+        }
+    },
+    "imaging_guidelines": {
+        "required_sequences": [
+            "T1-weighted"
+        ],
+        "supported_formats": [
+            "JPG (BRISC 2025 format)"
+        ],
+        "segmentation_regions": {
+            "tumor": "Binary segmentation — any tumor tissue vs background",
+            "background": "Normal brain parenchyma and non-brain regions"
+        },
+        "measurement_standards": {
+            "area_based": "2D area measurement in mm² from pixel-level segmentation",
+            "diameter": "Maximum diameter estimated from segmentation boundary"
+        }
+    },
+    "safety_thresholds": {
+        "confidence_minimum": 0.85,
+        "mandatory_review_triggers": [
+            "Classification confidence below threshold",
+            "Large tumor area (>15% of image)",
+            "Classification as uncertain or mixed features",
+            "Multiple potential classifications with similar probabilities"
+        ],
+        "reporting_requirements": [
+            "All AI outputs must include confidence scores",
+            "Disclaimer must accompany every report",
+            "Audit trail must be maintained for all analyses",
+            "Human review mandatory for scores below confidence threshold"
+        ]
+    },
+    "fda_ai_guidance": {
+        "classification": "AI/ML-based Software as a Medical Device (SaMD)",
+        "risk_category": "Class II (requires 510(k) for clinical use)",
+        "requirements": [
+            "Clinical validation with diverse populations",
+            "Continuous monitoring for algorithm drift",
+            "Transparency in AI decision-making",
+            "Predetermined change control plan"
+        ],
+        "current_status": "RESEARCH USE ONLY — Not FDA-cleared"
+    }
+}

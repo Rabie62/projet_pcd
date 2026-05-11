@@ -1,0 +1,53 @@
+<div class="grid-2">
+  <div class="glass-panel">
+    <div class="card-header">
+      <h2>RAG Knowledge Base</h2>
+    </div>
+    <div class="card-body" style="display: flex; flex-direction: column; gap: 1.5rem;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
+          <div class="text-muted" style="font-size: 0.85rem;">Total Chunks Indexed</div>
+          <div style="font-size: 1.5rem; font-weight: bold;">{{ status.total_chunks || 0 }}</div>
+        </div>
+        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
+          <div class="text-muted" style="font-size: 0.85rem;">Qdrant Status</div>
+          <div style="font-size: 1.5rem; font-weight: bold;" [class]="status.available ? 'text-primary' : 'danger'">
+            {{ status.available ? "ONLINE" : "OFFLINE" }}
+          </div>
+        </div>
+      </div>
+      
+      <form (submit)="handleUpload($event, fileInput)" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <input [(ngModel)]="uploadedBy" type="text" name="uploadedBy" placeholder="Nom du medecin" style="padding: 0.5rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: white;" />
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <input #fileInput type="file" name="file" accept=".pdf,.txt,.md" style="flex: 1;" />
+          <button type="submit" [disabled]="uploading">
+            <lucide-icon [name]="UploadCloudIcon" [size]="18"></lucide-icon> {{ uploading ? 'Indexation...' : 'Indexer le document' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="glass-panel" style="height: 70vh; overflow-y: auto;">
+    <div class="card-header">
+      <h2>Indexed Literature</h2>
+    </div>
+    <div class="card-body" style="display: flex; flex-direction: column; gap: 1rem;">
+      <div *ngIf="docs.length === 0" class="text-muted">No external documents uploaded yet.</div>
+      
+      <div *ngFor="let doc of docs" style="display: flex; align-items: center; justify-content: space-between; background: rgba(15,23,42,0.6); padding: 1rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <lucide-icon [name]="FileTextIcon" class="text-primary" [size]="24"></lucide-icon>
+          <div>
+            <div style="font-weight: 600;">{{ doc.filename }}</div>
+            <div class="text-muted" style="font-size: 0.8rem;">Uploaded by {{ doc.uploaded_by }} • {{ doc.chunk_count }} Chunks</div>
+          </div>
+        </div>
+        <button class="danger" style="padding: 0.5rem;" (click)="handleDelete(doc.document_id)">
+          <lucide-icon [name]="Trash2Icon" [size]="16"></lucide-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
