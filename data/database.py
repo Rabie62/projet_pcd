@@ -123,6 +123,8 @@ class Medecin(Base):
     tel = Column(String(20), nullable=True)
     email = Column(String(255), nullable=True)
     departement = Column(String(255), nullable=True)
+    username = Column(String(255), unique=True, nullable=True)
+    password = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(
         DateTime, default=func.now(), onupdate=func.now()

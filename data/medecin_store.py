@@ -37,6 +37,8 @@ class MedecinConsultationStore:
         tel: Optional[str] = None,
         email: Optional[str] = None,
         departement: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ) -> Medecin:
         """Create a new doctor record."""
         medecin = Medecin(
@@ -46,6 +48,8 @@ class MedecinConsultationStore:
             tel=tel,
             email=email,
             departement=departement,
+            username=username,
+            password=password,
         )
         with self.session_factory() as session:
             session.add(medecin)
@@ -76,6 +80,8 @@ class MedecinConsultationStore:
         tel: Optional[str] = None,
         email: Optional[str] = None,
         departement: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
     ) -> Optional[Medecin]:
         """Update an existing doctor's fields. Only non-None values are updated."""
         with self.session_factory() as session:
@@ -95,6 +101,10 @@ class MedecinConsultationStore:
                 medecin.email = email
             if departement is not None:
                 medecin.departement = departement
+            if username is not None:
+                medecin.username = username
+            if password is not None:
+                medecin.password = password
 
             medecin.updated_at = datetime.now(timezone.utc)
             session.commit()

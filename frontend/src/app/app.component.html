@@ -1,10 +1,11 @@
 <div class="app-layout">
-  <aside class="sidebar">
+  <aside *ngIf="authService.isLoggedIn()" class="sidebar" style="display: flex; flex-direction: column; height: 100%;">
     <div class="sidebar-brand">
       <lucide-icon [name]="ActivityIcon" class="text-primary"></lucide-icon>
       <span>Medical AI Hub</span>
     </div>
-    <nav style="display: flex; flex-direction: column; gap: 0.5rem;">
+    
+    <nav style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="sidebar-link">
         <lucide-icon [name]="UsersIcon"></lucide-icon>
         <span>Gestion Patients</span>
@@ -29,10 +30,17 @@
         <lucide-icon [name]="DatabaseIcon"></lucide-icon>
         <span>RAG Knowledge Base</span>
       </a>
+
+      <!-- Premium logout button at the bottom of the sidebar -->
+      <a (click)="logout()" class="sidebar-link" style="margin-top: auto; cursor: pointer; color: var(--danger);">
+        <lucide-icon [name]="LogOutIcon" style="color: var(--danger);"></lucide-icon>
+        <span>Se déconnecter</span>
+      </a>
     </nav>
   </aside>
-  <main class="main-content">
-    <div class="page-container">
+  
+  <main class="main-content" [style.padding]="authService.isLoggedIn() ? '2rem' : '0'">
+    <div class="page-container" [style.max-width]="authService.isLoggedIn() ? '1200px' : 'none'">
       <router-outlet></router-outlet>
     </div>
   </main>

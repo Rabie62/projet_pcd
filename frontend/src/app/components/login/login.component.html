@@ -1,0 +1,69 @@
+<div class="auth-container">
+  <!-- Glowing decorative circles -->
+  <div class="glow-sphere glow-1"></div>
+  <div class="glow-sphere glow-2"></div>
+
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="logo-wrapper">
+        <span class="logo-icon">🧠</span>
+      </div>
+      <h1>Medical AI Agent</h1>
+      <p class="auth-subtitle">Analyse & Diagnostic Intelligent des IRM Cérébrales</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="auth-form">
+      <div *ngIf="error" class="alert alert-danger animate-fade-in">
+        <span class="alert-icon">⚠️</span>
+        <span class="alert-message">{{ error }}</span>
+      </div>
+
+      <div class="form-group">
+        <label for="username">Nom d'utilisateur</label>
+        <div class="input-wrapper">
+          <span class="input-icon">👤</span>
+          <input 
+            type="text" 
+            id="username" 
+            formControlName="username" 
+            class="form-control" 
+            [ngClass]="{ 'is-invalid': submitted && f['username'].errors }"
+            placeholder="Ex: dr.martin"
+            autocomplete="username"
+          />
+        </div>
+        <div *ngIf="submitted && f['username'].errors" class="invalid-feedback animate-slide-down">
+          Le nom d'utilisateur est requis.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Mot de passe</label>
+        <div class="input-wrapper">
+          <span class="input-icon">🔒</span>
+          <input 
+            type="password" 
+            id="password" 
+            formControlName="password" 
+            class="form-control" 
+            [ngClass]="{ 'is-invalid': submitted && f['password'].errors }"
+            placeholder="••••••••"
+            autocomplete="current-password"
+          />
+        </div>
+        <div *ngIf="submitted && f['password'].errors" class="invalid-feedback animate-slide-down">
+          Le mot de passe est requis.
+        </div>
+      </div>
+
+      <button [disabled]="loading" class="btn btn-primary btn-block">
+        <span *ngIf="loading" class="spinner-border"></span>
+        <span *ngIf="!loading">Se Connecter</span>
+      </button>
+
+      <div class="auth-footer">
+        <p>Nouveau sur la plateforme ? <a routerLink="/register" class="auth-link">Créer un compte médecin</a></p>
+      </div>
+    </form>
+  </div>
+</div>

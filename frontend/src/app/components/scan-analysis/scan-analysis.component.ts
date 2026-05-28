@@ -2,6 +2,7 @@ import { Component, ElementRef, ViewChild } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { LucideAngularModule, Brain, UploadCloud, FileImage, X, Play, CheckCircle, AlertTriangle, Activity } from 'lucide-angular';
 import { environment } from '../../../environments/environment';
 
@@ -23,7 +24,9 @@ export class ScanAnalysisComponent {
 
   file: File | null = null;
   isDragging = false;
-  previewUrl: string | null = null;
+  previewUrl: SafeUrl | string | null = null;
+  summaryImageUrl: string | null = null;
+  private rawPreviewUrl: string | null = null;
   loading = false;
   result: any = null;
   error: string | null = null;
@@ -34,7 +37,7 @@ export class ScanAnalysisComponent {
 
   private API_BASE = environment.apiBase;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private sanitizer: DomSanitizer) {}
 
   handleDragOver(e: DragEvent) {
     e.preventDefault();
@@ -74,15 +77,18 @@ export class ScanAnalysisComponent {
     this.error = null;
     this.result = null;
 
-    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
-    // Create a local preview for the image
-    this.previewUrl = URL.createObjectURL(selectedFile);
+    if (this.rawPreviewUrl) URL.revokeObjectURL(this.rawPreviewUrl);
+    // Create a local preview for the image and sanitize it
+    this.rawPreviewUrl = URL.createObjectURL(selectedFile);
+    this.previewUrl = this.sanitizer.bypassSecurityTrustUrl(this.rawPreviewUrl);
   }
 
   clearFile() {
     this.file = null;
-    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+    if (this.rawPreviewUrl) URL.revokeObjectURL(this.rawPreviewUrl);
+    this.rawPreviewUrl = null;
     this.previewUrl = null;
+    this.summaryImageUrl = null;
     this.error = null;
     this.result = null;
     if (this.fileInput?.nativeElement) {
@@ -100,6 +106,7 @@ export class ScanAnalysisComponent {
     this.loading = true;
     this.error = null;
     this.result = null;
+    this.summaryImageUrl = null;
 
     const formData = new FormData();
     formData.append('file', this.file);
@@ -108,6 +115,7 @@ export class ScanAnalysisComponent {
     this.http.post(`${this.API_BASE}/analyze/upload`, formData).subscribe({
       next: (res: any) => {
         this.result = res;
+        this.summaryImageUrl = `${this.API_BASE}/summary/${res.session_id}?t=${Date.now()}`;
         this.loading = false;
       },
       error: (err) => {
@@ -125,7 +133,7 @@ export class ScanAnalysisComponent {
   }
 
   getSummaryUrl(): string {
-    return `${this.API_BASE}/summary/${this.result.session_id}?t=${Date.now()}`;
+    return this.result ? `${this.API_BASE}/summary/${this.result.session_id}?t=${Date.now()}` : '';
   }
 
   getMathSize(size: number) {

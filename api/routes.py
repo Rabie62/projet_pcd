@@ -884,6 +884,8 @@ async def create_medecin(request: MedecinCreateRequest):
             tel=request.tel,
             email=request.email,
             departement=request.departement,
+            username=request.username,
+            password=request.password,
         )
     except Exception as e:
         raise HTTPException(400, f"Failed to create doctor: {e}")
@@ -909,6 +911,7 @@ async def list_medecins():
             tel=m.tel,
             email=m.email,
             departement=m.departement,
+            username=m.username,
             consultation_count=len(m.consultations),
             created_at=m.created_at.isoformat() if m.created_at else "",
         )
@@ -946,6 +949,8 @@ async def update_medecin(id: int, request: MedecinUpdateRequest):
         tel=request.tel,
         email=request.email,
         departement=request.departement,
+        username=request.username,
+        password=request.password,
     )
     if medecin is None:
         raise HTTPException(404, f"Médecin {id} not found")
@@ -978,6 +983,7 @@ def build_medecin_response(medecin) -> MedecinResponse:
         tel=medecin.tel,
         email=medecin.email,
         departement=medecin.departement,
+        username=medecin.username,
         consultation_count=len(medecin.consultations),
         created_at=(
             medecin.created_at.isoformat() if medecin.created_at else ""

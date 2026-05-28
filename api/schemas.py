@@ -224,6 +224,8 @@ class MedecinCreateRequest(BaseModel):
     tel: Optional[str] = Field(None, description="Phone number")
     email: Optional[str] = Field(None, description="Email address")
     departement: Optional[str] = Field(None, description="Department / service")
+    username: Optional[str] = Field(None, description="Username for login")
+    password: Optional[str] = Field(None, description="Password for login")
 
 
 class MedecinUpdateRequest(BaseModel):
@@ -234,6 +236,8 @@ class MedecinUpdateRequest(BaseModel):
     tel: Optional[str] = None
     email: Optional[str] = None
     departement: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 
 class ConsultationListItem(BaseModel):
@@ -307,6 +311,7 @@ class MedecinResponse(BaseModel):
     tel: Optional[str] = None
     email: Optional[str] = None
     departement: Optional[str] = None
+    username: Optional[str] = None
     consultation_count: int = 0
     created_at: str = ""
     updated_at: Optional[str] = None
@@ -321,6 +326,7 @@ class MedecinListItem(BaseModel):
     tel: Optional[str] = None
     email: Optional[str] = None
     departement: Optional[str] = None
+    username: Optional[str] = None
     consultation_count: int = 0
     created_at: str = ""
 

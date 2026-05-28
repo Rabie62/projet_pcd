@@ -37,3 +37,11 @@ Thumbs.db
 
 # Environment variables
 .env
+
+# Maven build outputs
+target/
+**/target/
+
+# Local databases and user uploads
+data/qdrant_storage/
+data/uploads/
