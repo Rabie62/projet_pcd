@@ -36,7 +36,7 @@ export class ConsultationDashboardComponent implements OnInit {
   filterStatut = '';
   selectedPatientId: number | null = null;
 
-  private API_BASE = environment.apiBase;
+  private API_BASE = environment.apiUrl;
 
   constructor(private http: HttpClient) {}
 
@@ -50,9 +50,9 @@ export class ConsultationDashboardComponent implements OnInit {
     this.loading = true;
     const params: any = {};
     if (this.selectedPatientId) params.patient_id = this.selectedPatientId;
-    this.http.get<any[]>(`${this.API_BASE}/consultations`, { params }).subscribe({
+    this.http.get<any>(`${this.API_BASE}/consultations`, { params }).subscribe({
       next: (data) => {
-        this.consultations = data;
+        this.consultations = data.items ?? data ?? [];
         this.loading = false;
       },
       error: (err) => {
@@ -63,15 +63,15 @@ export class ConsultationDashboardComponent implements OnInit {
   }
 
   fetchMedecins() {
-    this.http.get<any[]>(`${this.API_BASE}/medecins`).subscribe({
-      next: (data) => { this.medecins = data; },
+    this.http.get<any>(`${this.API_BASE}/medecins`).subscribe({
+      next: (data) => { this.medecins = data.items ?? data ?? []; },
       error: (err) => { console.error(err); }
     });
   }
 
   fetchPatients() {
-    this.http.get<any[]>(`${this.API_BASE}/patients`).subscribe({
-      next: (data) => { this.patients = data; },
+    this.http.get<any>(`${this.API_BASE}/patients`).subscribe({
+      next: (data) => { this.patients = data.items ?? data ?? []; },
       error: (err) => { console.error(err); }
     });
   }

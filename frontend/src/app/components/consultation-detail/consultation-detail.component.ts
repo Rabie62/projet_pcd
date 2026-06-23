@@ -27,7 +27,7 @@ export class ConsultationDetailComponent implements OnInit, OnChanges {
   summaryImageUrl: string | null = null;
   loading = false;
 
-  private API_BASE = environment.apiBase;
+  private API_BASE = environment.apiUrl;
 
   constructor(private http: HttpClient) {}
 

@@ -14,8 +14,8 @@ from loguru import logger
 from data.database import (
     Patient,
     ScanRecord,
-    create_database_engine,
 )
+from data.db import get_session_factory, init_database
 
 
 class PatientStore:
@@ -29,8 +29,8 @@ class PatientStore:
     """
 
     def __init__(self):
-        self.engine, self.session_factory = create_database_engine()
-        logger.info("PatientStore initialised (MySQL)")
+        self.session_factory = get_session_factory()
+        logger.info("PatientStore initialised (shared engine)")
 
     # ── Patient CRUD ──────────────────────────────────────────────────
 

@@ -33,7 +33,7 @@ export class AIChatPanelComponent implements AfterViewChecked {
   sessionId = '';
   loading = false;
 
-  private API_BASE = environment.apiBase;
+  private API_BASE = environment.apiUrl;
 
   constructor(private sanitizer: DomSanitizer) {
     // Configure marked options if needed

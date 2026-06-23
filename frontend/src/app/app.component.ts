@@ -3,17 +3,18 @@ import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/rou
 import { CommonModule } from '@angular/common';
 import { LucideAngularModule, Activity, Users, FileSearch, MessageSquare, Database, Stethoscope, ClipboardList, LogOut } from 'lucide-angular';
 import { AuthService } from './services/auth.service';
+import { ToastContainerComponent } from './components/toast-container/toast-container.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, LucideAngularModule],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, LucideAngularModule, ToastContainerComponent],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
   title = 'Medical AI Hub';
-  
+
   readonly ActivityIcon = Activity;
   readonly UsersIcon = Users;
   readonly FileSearchIcon = FileSearch;
@@ -30,6 +31,5 @@ export class AppComponent {
 
   logout(): void {
     this.authService.logout();
-    this.router.navigate(['/login']);
   }
 }

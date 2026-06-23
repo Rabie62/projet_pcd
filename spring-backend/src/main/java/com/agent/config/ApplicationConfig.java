@@ -1,7 +1,6 @@
 package com.agent.config;
 
 import com.agent.repository.MedecinRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -16,8 +15,11 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @Configuration
 public class ApplicationConfig {
 
-    @Autowired
-    private MedecinRepository medecinRepository;
+    private final MedecinRepository medecinRepository;
+
+    public ApplicationConfig(MedecinRepository medecinRepository) {
+        this.medecinRepository = medecinRepository;
+    }
 
     @Bean
     public UserDetailsService userDetailsService() {

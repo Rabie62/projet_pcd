@@ -33,7 +33,7 @@ export class PatientRegistryFormComponent {
 
   loading = false;
   error: string | null = null;
-  private API_BASE = environment.apiBase;
+  private API_BASE = environment.apiUrl;
 
   constructor(private http: HttpClient) { }
 

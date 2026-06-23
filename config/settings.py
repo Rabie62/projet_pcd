@@ -51,7 +51,13 @@ class APIConfig:
     """FastAPI server configuration."""
     host: str = "0.0.0.0"
     port: int = 8000
-    cors_origins: list[str] = field(default_factory=lambda: ["*"])
+    cors_origins: list[str] = field(
+        default_factory=lambda: [
+            "http://localhost:4200",   # Angular dev server
+            "http://localhost:3000",   # Alternative frontend
+            "http://localhost:8080",   # Spring Boot gateway
+        ]
+    )
     max_upload_size_mb: int = 500
 
 
@@ -90,8 +96,17 @@ class DatabaseConfig:
     def url(self) -> Optional[str]:
         if not self.host:
             return None
+        if not self.password:
+            logger.warning("MYSQL_PASSWORD is empty — database connection will likely fail")
         from urllib.parse import quote_plus
         encoded_pass = quote_plus(self.password)
+        return f"mysql+pymysql://{self.user}:{encoded_pass}@{self.host}:{self.port}/{self.name}"
+
+    @property
+    def url_safe(self) -> Optional[str]:
+        """URL with password masked for logging."""
+        if not self.host:
+            return None
         return f"mysql+pymysql://{self.user}:{encoded_pass}@{self.host}:{self.port}/{self.name}"
 
 
@@ -140,9 +155,23 @@ def get_settings() -> Settings:
         hf_token=os.environ.get("HF_TOKEN"),
     )
 
+    # Parse CORS origins from env (comma-separated) or use defaults
+    cors_env = os.environ.get("CORS_ORIGINS", "")
+    if cors_env:
+        cors_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
+    else:
+        cors_origins = [
+            "http://localhost:4200",   # Angular dev server
+            "http://localhost:3000",   # Alternative frontend
+            "http://localhost:8080",   # Spring Boot gateway
+        ]
+
+    api = APIConfig(cors_origins=cors_origins)
+
     return Settings(
         model=model,
         inference=inference,
+        api=api,
         db=DatabaseConfig(),
         icd11=ICD11Config(),
     )

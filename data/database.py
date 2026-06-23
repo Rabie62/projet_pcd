@@ -186,13 +186,18 @@ class Consultation(Base):
 def create_database_engine() -> tuple:
     """
     Create SQLAlchemy engine and session factory for MySQL.
-    
+
+    Tables are created only if they don't exist (checkfirst=True).
+    If the database is unreachable, a clear error is raised — tables are
+    never dropped automatically.
+
     Raises:
-        RuntimeError: If MySQL configuration is missing in environment.
+        RuntimeError: If MySQL configuration is missing or the server
+                      is unreachable.
     """
     settings = get_settings()
     db_url = settings.db.url
-    
+
     if not db_url:
         logger.error("MySQL configuration missing in environment variables.")
         raise RuntimeError(
@@ -200,15 +205,27 @@ def create_database_engine() -> tuple:
             "Ensure MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, and "
             "MYSQL_DATABASE are set in .env"
         )
-    
+
     logger.info("Using MySQL SGBD engine")
     engine = create_engine(
         db_url,
         echo=False,
+        pool_pre_ping=True,  # verify connections before use
     )
 
-    # Create tables if they don't exist
-    Base.metadata.create_all(engine)
+    # Create tables if they don't exist. Never drop existing tables.
+    from sqlalchemy.exc import OperationalError
+    try:
+        Base.metadata.create_all(engine)
+    except OperationalError as e:
+        logger.error(f"Cannot connect to MySQL: {e}")
+        raise RuntimeError(
+            f"Failed to connect to MySQL at {settings.db.host}:"
+            f"{settings.db.port}. Check that MySQL is running and "
+            f"the database '{settings.db.name}' exists. "
+            f"Original error: {e}"
+        ) from e
+
     session_factory = sessionmaker(bind=engine)
     logger.info("Database initialized successfully (MySQL).")
     return engine, session_factory

@@ -1,18 +1,22 @@
-import { Component, ElementRef, ViewChild } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { LucideAngularModule, Brain, UploadCloud, FileImage, X, Play, CheckCircle, AlertTriangle, Activity } from 'lucide-angular';
+import { Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { ErrorHandlerService } from '../../services/error-handler.service';
+import { AnalysisResponse } from '../../models';
 
 @Component({
   selector: 'app-scan-analysis',
   standalone: true,
   imports: [CommonModule, FormsModule, LucideAngularModule],
-  templateUrl: './scan-analysis.component.html'
+  templateUrl: './scan-analysis.component.html',
+  styleUrls: ['./scan-analysis.component.css']
 })
-export class ScanAnalysisComponent {
+export class ScanAnalysisComponent implements OnDestroy {
   readonly BrainIcon = Brain;
   readonly UploadCloudIcon = UploadCloud;
   readonly FileImageIcon = FileImage;
@@ -28,16 +32,29 @@ export class ScanAnalysisComponent {
   summaryImageUrl: string | null = null;
   private rawPreviewUrl: string | null = null;
   loading = false;
-  result: any = null;
+  result: AnalysisResponse | null = null;
   error: string | null = null;
-  patientId: any = '';
-  viewMode: 'summary' = 'summary';
+  patientId: number | null = null;
+
+  private destroy$ = new Subject<void>();
+  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+  private readonly ALLOWED_TYPES = ['image/jpeg', 'image/png'];
 
   @ViewChild('fileInput') fileInput!: ElementRef;
 
-  private API_BASE = environment.apiBase;
+  private API_BASE = environment.apiUrl;
 
-  constructor(private http: HttpClient, private sanitizer: DomSanitizer) {}
+  constructor(
+    private http: HttpClient,
+    private sanitizer: DomSanitizer,
+    private errorHandler: ErrorHandlerService
+  ) {}
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+    if (this.rawPreviewUrl) URL.revokeObjectURL(this.rawPreviewUrl);
+  }
 
   handleDragOver(e: DragEvent) {
     e.preventDefault();
@@ -65,20 +82,23 @@ export class ScanAnalysisComponent {
   }
 
   handleFileSelection(selectedFile: File) {
-    const validExts = ['.jpg', '.jpeg', '.png'];
-    const filename = selectedFile.name.toLowerCase();
-    const isValid = validExts.some(ext => filename.endsWith(ext));
-    
-    if (!isValid) {
+    // Validate file type
+    if (!this.ALLOWED_TYPES.includes(selectedFile.type)) {
       this.error = 'Veuillez télécharger un fichier de type JPG ou PNG.';
       return;
     }
+
+    // Validate file size
+    if (selectedFile.size > this.MAX_FILE_SIZE) {
+      this.error = `Le fichier est trop volumineux (${this.getMathSize(selectedFile.size)}). Maximum: ${this.getMathSize(this.MAX_FILE_SIZE)}.`;
+      return;
+    }
+
     this.file = selectedFile;
     this.error = null;
     this.result = null;
 
     if (this.rawPreviewUrl) URL.revokeObjectURL(this.rawPreviewUrl);
-    // Create a local preview for the image and sanitize it
     this.rawPreviewUrl = URL.createObjectURL(selectedFile);
     this.previewUrl = this.sanitizer.bypassSecurityTrustUrl(this.rawPreviewUrl);
   }
@@ -98,7 +118,7 @@ export class ScanAnalysisComponent {
 
   handleAnalyze() {
     if (!this.file) return;
-    if (this.patientId === null || this.patientId === undefined || this.patientId === '') {
+    if (this.patientId === null || this.patientId === undefined || this.patientId <= 0) {
       this.error = "L'ID du patient est requis pour lier l'historique d'examens.";
       return;
     }
@@ -107,37 +127,30 @@ export class ScanAnalysisComponent {
     this.error = null;
     this.result = null;
     this.summaryImageUrl = null;
+    this.errorHandler.setLoading(true);
 
     const formData = new FormData();
     formData.append('file', this.file);
     formData.append('patient_id', this.patientId.toString());
 
-    this.http.post(`${this.API_BASE}/analyze/upload`, formData).subscribe({
-      next: (res: any) => {
+    this.http.post<AnalysisResponse>(`${this.API_BASE}/analyze/upload`, formData, {
+      withCredentials: true
+    }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
         this.result = res;
         this.summaryImageUrl = `${this.API_BASE}/summary/${res.session_id}?t=${Date.now()}`;
         this.loading = false;
+        this.errorHandler.setLoading(false);
       },
       error: (err) => {
-        console.error('API Error:', err);
-        let parsedDetail = err.error?.detail || err.message;
-        if(typeof parsedDetail === 'string' && parsedDetail.startsWith('{')) {
-          try {
-            parsedDetail = JSON.parse(parsedDetail).detail || parsedDetail;
-          } catch(e) {}
-        }
-        this.error = parsedDetail || "L'analyse a échoué.";
+        this.errorHandler.handleError(err);
         this.loading = false;
+        this.errorHandler.setLoading(false);
       }
     });
   }
 
-  getSummaryUrl(): string {
-    return this.result ? `${this.API_BASE}/summary/${this.result.session_id}?t=${Date.now()}` : '';
-  }
-
-  getMathSize(size: number) {
-     return (size / 1024 / 1024).toFixed(2);
+  getMathSize(size: number): string {
+    return (size / 1024 / 1024).toFixed(2);
   }
 }
-

@@ -1,79 +1,131 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { LucideAngularModule, UploadCloud, FileText, Trash2 } from 'lucide-angular';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { ErrorHandlerService } from '../../services/error-handler.service';
+import { KnowledgeDocument, KnowledgeStatus } from '../../models';
 
 @Component({
   selector: 'app-knowledge-base',
   standalone: true,
-  imports: [CommonModule, FormsModule, LucideAngularModule],
-  templateUrl: './knowledge-base.component.html'
+  imports: [CommonModule, LucideAngularModule],
+  templateUrl: './knowledge-base.component.html',
+  styleUrls: ['./knowledge-base.component.css']
 })
-export class KnowledgeBaseComponent implements OnInit {
+export class KnowledgeBaseComponent implements OnInit, OnDestroy {
   readonly UploadCloudIcon = UploadCloud;
   readonly FileTextIcon = FileText;
   readonly Trash2Icon = Trash2;
 
-  docs: any[] = [];
+  docs: KnowledgeDocument[] = [];
   loading = true;
-  status: any = {};
+  status: KnowledgeStatus = { available: false, total_chunks: 0, uploaded_documents: 0, system_knowledge_indexed: false };
   uploading = false;
 
-  private API_BASE = environment.apiBase;
+  private destroy$ = new Subject<void>();
+  private API_BASE = environment.apiUrl;
+  private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+  private readonly ALLOWED_TYPES = ['.txt', '.md', '.pdf'];
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private errorHandler: ErrorHandlerService
+  ) {}
 
-  ngOnInit() {
+  ngOnInit(): void {
     this.fetchDocs();
     this.fetchStatus();
   }
 
-  async fetchDocs() {
-    try {
-      this.docs = await firstValueFrom(this.http.get<any[]>(`${this.API_BASE}/knowledge/documents`));
-    } catch(e) {}
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
-  async fetchStatus() {
+  async fetchDocs(): Promise<void> {
     try {
-      this.status = await firstValueFrom(this.http.get<any>(`${this.API_BASE}/knowledge/status`));
+      this.docs = await firstValueFrom(
+        this.http.get<KnowledgeDocument[]>(`${this.API_BASE}/knowledge/documents`, { withCredentials: true })
+          .pipe(takeUntil(this.destroy$))
+      );
+    } catch (err) {
+      this.errorHandler.handleError(err as any);
+    }
+  }
+
+  async fetchStatus(): Promise<void> {
+    try {
+      this.status = await firstValueFrom(
+        this.http.get<KnowledgeStatus>(`${this.API_BASE}/knowledge/status`, { withCredentials: true })
+          .pipe(takeUntil(this.destroy$))
+      );
       this.loading = false;
-    } catch(e) {}
+    } catch (err) {
+      this.errorHandler.handleError(err as any);
+      this.loading = false;
+    }
   }
 
-  uploadedBy: string = '';
-
-  async handleUpload(e: Event, fileInput: HTMLInputElement) {
+  async handleUpload(e: Event, fileInput: HTMLInputElement): Promise<void> {
     e.preventDefault();
     const file = fileInput.files?.[0];
     if (!file) return;
 
-    const doctorName = this.uploadedBy.trim() || 'Anonyme';
+    // Validate file type
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!this.ALLOWED_TYPES.includes(ext)) {
+      this.errorHandler.addError(`Type de fichier non supporté. Formats acceptés: ${this.ALLOWED_TYPES.join(', ')}`, 'warning');
+      return;
+    }
+
+    // Validate file size
+    if (file.size > this.MAX_FILE_SIZE) {
+      this.errorHandler.addError(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum: 10 MB.`, 'warning');
+      return;
+    }
+
     this.uploading = true;
+    this.errorHandler.setLoading(true);
+
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      await firstValueFrom(this.http.post(`${this.API_BASE}/knowledge/upload?uploaded_by=${encodeURIComponent(doctorName)}`, formData));
+      await firstValueFrom(
+        this.http.post(
+          `${this.API_BASE}/knowledge/upload`,
+          formData,
+          { withCredentials: true }
+        ).pipe(takeUntil(this.destroy$))
+      );
       await this.fetchDocs();
       await this.fetchStatus();
-    } catch(err) {
-      alert("Upload failed.");
+      this.errorHandler.addError('Document uploadé avec succès.', 'info');
+    } catch (err) {
+      this.errorHandler.handleError(err as any);
     } finally {
       this.uploading = false;
+      this.errorHandler.setLoading(false);
       const target = e.target as HTMLFormElement;
-      if(target) target.reset();
+      if (target) target.reset();
     }
   }
 
-  async handleDelete(id: string) {
+  async handleDelete(id: string): Promise<void> {
+    if (!window.confirm('Supprimer ce document ? Cette action est irréversible.')) return;
+
     try {
-      await firstValueFrom(this.http.delete(`${this.API_BASE}/knowledge/documents/${id}`));
+      await firstValueFrom(
+        this.http.delete(`${this.API_BASE}/knowledge/documents/${id}`, { withCredentials: true })
+          .pipe(takeUntil(this.destroy$))
+      );
       await this.fetchDocs();
       await this.fetchStatus();
-    } catch(e) {}
+      this.errorHandler.addError('Document supprimé.', 'info');
+    } catch (err) {
+      this.errorHandler.handleError(err as any);
+    }
   }
 }

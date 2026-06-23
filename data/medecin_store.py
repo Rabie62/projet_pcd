@@ -9,13 +9,24 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 from loguru import logger
+import bcrypt
 from data.database import (
     Patient,
     Medecin,
     Consultation,
     ScanRecord,
-    create_database_engine,
 )
+from data.db import get_session_factory
+
+
+def _hash_password(password: str) -> str:
+    """Hash a plain-text password using bcrypt."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """Verify a plain-text password against a bcrypt hash."""
+    return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
 
 class MedecinConsultationStore:
@@ -24,8 +35,8 @@ class MedecinConsultationStore:
     """
 
     def __init__(self):
-        self.engine, self.session_factory = create_database_engine()
-        logger.info("MedecinConsultationStore initialised (MySQL)")
+        self.session_factory = get_session_factory()
+        logger.info("MedecinConsultationStore initialised (shared engine)")
 
     # ── Médecin CRUD ──────────────────────────────────────────────────
 
@@ -40,7 +51,7 @@ class MedecinConsultationStore:
         username: Optional[str] = None,
         password: Optional[str] = None,
     ) -> Medecin:
-        """Create a new doctor record."""
+        """Create a new doctor record. Password is hashed with bcrypt before storage."""
         medecin = Medecin(
             nom=nom,
             prenom=prenom,
@@ -49,7 +60,7 @@ class MedecinConsultationStore:
             email=email,
             departement=departement,
             username=username,
-            password=password,
+            password=_hash_password(password) if password else None,
         )
         with self.session_factory() as session:
             session.add(medecin)
@@ -104,7 +115,7 @@ class MedecinConsultationStore:
             if username is not None:
                 medecin.username = username
             if password is not None:
-                medecin.password = password
+                medecin.password = _hash_password(password)
 
             medecin.updated_at = datetime.now(timezone.utc)
             session.commit()
@@ -114,6 +125,21 @@ class MedecinConsultationStore:
 
             logger.info(f"Medecin updated: ID {id}")
             return medecin
+
+    def verify_password(self, username: str, password: str) -> Optional[Medecin]:
+        """
+        Verify a doctor's password for login.
+        Returns the Medecin if credentials are valid, None otherwise.
+        """
+        with self.session_factory() as session:
+            medecin = session.query(Medecin).filter_by(username=username).first()
+            if medecin is None:
+                return None
+            if medecin.password and _verify_password(password, medecin.password):
+                _ = medecin.consultations
+                session.expunge(medecin)
+                return medecin
+            return None
 
     def delete_medecin(self, id: int) -> bool:
         """Delete a doctor and all linked consultation records."""

@@ -1,47 +1,49 @@
 <div class="app-layout">
-  <aside *ngIf="authService.isLoggedIn()" class="sidebar" style="display: flex; flex-direction: column; height: 100%;">
+  <aside *ngIf="authService.isLoggedIn()" class="sidebar" style="display: flex; flex-direction: column; height: 100%;" role="navigation" aria-label="Navigation principale">
     <div class="sidebar-brand">
       <lucide-icon [name]="ActivityIcon" class="text-primary"></lucide-icon>
       <span>Medical AI Hub</span>
     </div>
-    
-    <nav style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="sidebar-link">
+
+    <nav style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;" aria-label="Menu">
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="sidebar-link" aria-label="Gestion des patients">
         <lucide-icon [name]="UsersIcon"></lucide-icon>
         <span>Gestion Patients</span>
       </a>
-      <a routerLink="/medecins" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/medecins" routerLinkActive="active" class="sidebar-link" aria-label="Gestion des médecins">
         <lucide-icon [name]="StethoscopeIcon"></lucide-icon>
         <span>Gestion Médecins</span>
       </a>
-      <a routerLink="/consultations" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/consultations" routerLinkActive="active" class="sidebar-link" aria-label="Gestion des consultations">
         <lucide-icon [name]="ClipboardListIcon"></lucide-icon>
         <span>Gestion Consultations</span>
       </a>
-      <a routerLink="/analysis" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/analysis" routerLinkActive="active" class="sidebar-link" aria-label="Gestion des examens">
         <lucide-icon [name]="FileSearchIcon"></lucide-icon>
         <span>Gestion Examens</span>
       </a>
-      <a routerLink="/chat" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/chat" routerLinkActive="active" class="sidebar-link" aria-label="Dialogue avec l'agent IA">
         <lucide-icon [name]="MessageSquareIcon"></lucide-icon>
         <span>Dialogue Agent</span>
       </a>
-      <a routerLink="/knowledge" routerLinkActive="active" class="sidebar-link">
+      <a routerLink="/knowledge" routerLinkActive="active" class="sidebar-link" aria-label="Base de connaissances">
         <lucide-icon [name]="DatabaseIcon"></lucide-icon>
         <span>RAG Knowledge Base</span>
       </a>
 
-      <!-- Premium logout button at the bottom of the sidebar -->
-      <a (click)="logout()" class="sidebar-link" style="margin-top: auto; cursor: pointer; color: var(--danger);">
+      <a (click)="logout()" (keydown.enter)="logout()" class="sidebar-link" style="margin-top: auto; cursor: pointer; color: var(--danger);" role="button" tabindex="0" aria-label="Se déconnecter">
         <lucide-icon [name]="LogOutIcon" style="color: var(--danger);"></lucide-icon>
         <span>Se déconnecter</span>
       </a>
     </nav>
   </aside>
-  
-  <main class="main-content" [style.padding]="authService.isLoggedIn() ? '2rem' : '0'">
+
+  <main class="main-content" [style.padding]="authService.isLoggedIn() ? '2rem' : '0'" role="main">
     <div class="page-container" [style.max-width]="authService.isLoggedIn() ? '1200px' : 'none'">
       <router-outlet></router-outlet>
     </div>
   </main>
 </div>
+
+<!-- Global Toast Notifications -->
+<app-toast-container></app-toast-container>

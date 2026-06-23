@@ -4,15 +4,37 @@ Adapted for BRISC 2025 dataset.
 """
 
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, TypeVar, Generic
 from pydantic import BaseModel, Field
+
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response wrapper."""
+    items: list[T]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+    @classmethod
+    def create(cls, items: list[T], total: int, page: int, page_size: int) -> "PaginatedResponse[T]":
+        return cls(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+            total_pages=max(1, (total + page_size - 1) // page_size),
+        )
 
 
 # ── Requests ──────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
     """Request body for the chat endpoint."""
-    query: str = Field(..., description="Clinician's natural language query")
+    query: str = Field(..., max_length=2000, description="Clinician's natural language query")
     session_id: Optional[str] = Field(
         None, description="Analysis session ID for context"
     )
@@ -28,7 +50,7 @@ class AnalyzeRequest(BaseModel):
         description="Patient ID — if provided, fetches history and auto-links scan",
     )
     clinical_notes: Optional[str] = Field(
-        None,
+        None, max_length=5000,
         description="Clinical notes from the referring physician for this scan",
     )
 
@@ -285,20 +307,20 @@ class ConsultationCreateRequest(BaseModel):
     patient_id: int = Field(..., description="Patient ID")
     medecin_id: int = Field(..., description="Doctor ID")
     scan_record_id: Optional[int] = Field(None, description="Linked scan record ID")
-    motif: Optional[str] = Field(None, description="Reason for consultation")
-    diagnostic: Optional[str] = Field(None, description="Diagnosis")
-    notes: Optional[str] = Field(None, description="Additional notes")
-    rapport_genere: Optional[str] = Field(None, description="Generated report content")
+    motif: Optional[str] = Field(None, max_length=500, description="Reason for consultation")
+    diagnostic: Optional[str] = Field(None, max_length=2000, description="Diagnosis")
+    notes: Optional[str] = Field(None, max_length=5000, description="Additional notes")
+    rapport_genere: Optional[str] = Field(None, max_length=10000, description="Generated report content")
     statut: Optional[str] = Field("en_cours", description="Consultation status")
 
 
 class ConsultationUpdateRequest(BaseModel):
     """Request to update an existing consultation."""
     medecin_id: Optional[int] = None
-    motif: Optional[str] = None
-    diagnostic: Optional[str] = None
-    notes: Optional[str] = None
-    rapport_genere: Optional[str] = None
+    motif: Optional[str] = Field(None, max_length=500)
+    diagnostic: Optional[str] = Field(None, max_length=2000)
+    notes: Optional[str] = Field(None, max_length=5000)
+    rapport_genere: Optional[str] = Field(None, max_length=10000)
     statut: Optional[str] = None
 
 

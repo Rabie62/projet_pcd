@@ -24,7 +24,6 @@ export class LoginComponent implements OnInit {
     private router: Router,
     private authService: AuthService
   ) {
-    // Redirect if already logged in
     if (this.authService.isLoggedIn()) {
       this.router.navigate(['/']);
     }
@@ -36,19 +35,19 @@ export class LoginComponent implements OnInit {
       password: ['', Validators.required]
     });
 
-    // Get return url from route parameters or default to '/'
     this.returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/';
+
+    // Show session expired message
+    if (this.route.snapshot.queryParams['reason'] === 'session_expired') {
+      this.error = 'Votre session a expiré. Veuillez vous reconnecter.';
+    }
   }
 
   get f() { return this.loginForm.controls; }
 
   onSubmit(): void {
     this.submitted = true;
-
-    // Stop here if form is invalid
-    if (this.loginForm.invalid) {
-      return;
-    }
+    if (this.loginForm.invalid) return;
 
     this.loading = true;
     this.error = '';
@@ -60,8 +59,8 @@ export class LoginComponent implements OnInit {
       next: () => {
         this.router.navigate([this.returnUrl]);
       },
-      error: err => {
-        this.error = err.error?.message || 'Nom d\'utilisateur ou mot de passe incorrect.';
+      error: (err) => {
+        this.error = err.message || 'Nom d\'utilisateur ou mot de passe incorrect.';
         this.loading = false;
       }
     });

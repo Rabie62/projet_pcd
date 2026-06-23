@@ -10,8 +10,10 @@ Edges:
     START → vision → (conditional) → diagnostic → safety → END
                    → safety (no tumor)
                    → END (error)
-"""
 
+Agent management uses AgentRegistry for dependency injection instead of
+global singletons, making the code thread-safe and testable.
+"""
 from __future__ import annotations
 import os
 import uuid
@@ -27,84 +29,105 @@ from agents.safety import SafetyAgent
 from agents.dialogue import DialogueAgent
 from knowledge.rag import KnowledgeRAG
 
-# ─── RAG system singleton ───
-rag_system = None
 
-# ─── Agent singleton instances (lazily initialised) ───
+class AgentRegistry:
+    """
+    Dependency injection container for agent instances.
 
-vision_agent: Optional[VisionAgent] = None
-diagnostic_agent: Optional[DiagnosticAgent] = None
-safety_agent: Optional[SafetyAgent] = None
-dialogue_agent: Optional[DialogueAgent] = None
+    Replaces the previous global singleton pattern (get_agents() with mutable
+    global variables) with an explicit, instance-based registry that is
+    thread-safe and testable.
 
+    Usage:
+        registry = AgentRegistry.create(settings)
+        registry.vision.load_models()
+        result = registry.vision.analyze(patient)
+    """
 
-def get_agents(settings: Optional[Settings] = None):
-    """Initialise and return agent singletons on first call."""
-    global vision_agent, diagnostic_agent, safety_agent, dialogue_agent
-    global rag_system
+    def __init__(self):
+        self.vision: Optional[VisionAgent] = None
+        self.diagnostic: Optional[DiagnosticAgent] = None
+        self.safety: Optional[SafetyAgent] = None
+        self.dialogue: Optional[DialogueAgent] = None
+        self.rag_system: Optional[KnowledgeRAG] = None
 
-    if vision_agent is not None:
-        return vision_agent, diagnostic_agent, safety_agent, dialogue_agent
+    @classmethod
+    def create(cls, settings: Optional[Settings] = None) -> "AgentRegistry":
+        """Factory method: create and initialize all agents."""
+        logger.info("AgentRegistry.create() called")
+        registry = cls()
+        resolved_settings = settings or get_settings()
 
-    resolved_settings = settings or get_settings()
-    vision_agent = VisionAgent(resolved_settings)
+        registry.vision = VisionAgent(resolved_settings)
 
-    # Initialise RAG system
-    llm_report_enabled = (
-        os.environ.get("LLM_REPORT_GENERATION", "1") == "1"
-    )
-    rag_enabled = os.environ.get("RAG_ENABLED", "1") == "1"
+        # Initialize RAG system
+        llm_report_enabled = os.environ.get("LLM_REPORT_GENERATION", "1") == "1"
+        rag_enabled = os.environ.get("RAG_ENABLED", "1") == "1"
 
-    if rag_enabled:
-        rag_model = os.environ.get(
-            "RAG_EMBEDDING_MODEL", "pritamdeka/S-PubMedBert-MS-MARCO"
+        if rag_enabled:
+            rag_model = os.environ.get(
+                "RAG_EMBEDDING_MODEL", "pritamdeka/S-PubMedBert-MS-MARCO"
+            )
+            qdrant_persistent = os.environ.get("QDRANT_PERSISTENT", "1") == "1"
+            registry.rag_system = KnowledgeRAG(
+                knowledge_dir=resolved_settings.paths.knowledge_dir,
+                uploads_dir=resolved_settings.paths.uploads_dir,
+                qdrant_storage_dir=resolved_settings.paths.qdrant_storage_dir,
+                embedding_model=rag_model,
+                persistent=qdrant_persistent,
+            )
+            n_indexed = registry.rag_system.index_system_knowledge()
+            total = registry.rag_system.get_collection_count()
+            logger.info(
+                f"RAG system initialised: {n_indexed} new system chunks, "
+                f"{total} total chunks in store"
+            )
+
+        registry.dialogue = DialogueAgent(
+            resolved_settings, rag_system=registry.rag_system
         )
-        qdrant_persistent = (
-            os.environ.get("QDRANT_PERSISTENT", "1") == "1"
+        registry.diagnostic = DiagnosticAgent(
+            llm_report_enabled=llm_report_enabled,
+            rag_system=registry.rag_system,
+            dialogue_agent=registry.dialogue,
         )
-        rag_system = KnowledgeRAG(
-            knowledge_dir=resolved_settings.paths.knowledge_dir,
-            uploads_dir=resolved_settings.paths.uploads_dir,
-            qdrant_storage_dir=resolved_settings.paths.qdrant_storage_dir,
-            embedding_model=rag_model,
-            persistent=qdrant_persistent,
-        )
-        n_indexed = rag_system.index_system_knowledge()
-        total = rag_system.get_collection_count()
-        logger.info(
-            f"RAG system initialised: {n_indexed} new system chunks, "
-            f"{total} total chunks in store"
-        )
+        registry.safety = SafetyAgent(resolved_settings)
 
-    # Initialise dialogue agent with RAG reference (rag_system is None if disabled)
-    dialogue_agent = DialogueAgent(resolved_settings, rag_system=rag_system)
+        return registry
 
-    # Initialise diagnostic agent with LLM + RAG references
-    diagnostic_agent = DiagnosticAgent(
-        llm_report_enabled=llm_report_enabled,
-        rag_system=rag_system,
-        dialogue_agent=dialogue_agent,
-    )
-
-    safety_agent = SafetyAgent(resolved_settings)
-
-    return vision_agent, diagnostic_agent, safety_agent, dialogue_agent
+    def load_models(self) -> None:
+        """Pre-load all vision and LLM models."""
+        if self.vision:
+            self.vision.load_models()
+        if self.dialogue:
+            self.dialogue.load_model()
+        logger.info("All models (vision + LLM) loaded")
 
 
-def load_models(settings: Optional[Settings] = None) -> None:
-    """Pre-load all models (vision and LLM)."""
-    vision, _, _, dialogue = get_agents(settings)
-    vision.load_models()
-    dialogue.load_model()
-    logger.info("All models (vision + LLM) loaded via graph.load_models()")
+# ─── Module-level registry (lazy, replaced during app startup) ───
+_registry: Optional[AgentRegistry] = None
 
 
-# ─── Node functions ───
+def get_registry() -> AgentRegistry:
+    """Get the current agent registry."""
+    global _registry
+    if _registry is None:
+        _registry = AgentRegistry.create()
+    return _registry
 
+
+def set_registry(registry: AgentRegistry) -> None:
+    """Set the agent registry (called at app startup)."""
+    global _registry
+    _registry = registry
+
+
+# ─── Node functions (use registry instead of global singletons) ───
 
 def vision_node(state: MedicalGraphState) -> dict:
     """Run VisionAgent: preprocess, segment, classify."""
-    vision, _, _, _ = get_agents()
+    registry = get_registry()
+    vision = registry.vision
 
     logger.info(f"[{state['session_id']}] Vision node executing...")
     state_update = {"status": "segmenting"}
@@ -124,7 +147,8 @@ def vision_node(state: MedicalGraphState) -> dict:
 
 def diagnostic_node(state: MedicalGraphState) -> dict:
     """Run DiagnosticAgent: extract features, generate report."""
-    _, diagnostic, _, _ = get_agents()
+    registry = get_registry()
+    diagnostic = registry.diagnostic
 
     logger.info(f"[{state['session_id']}] Diagnostic node executing...")
     state_update = {"status": "diagnosing"}
@@ -144,7 +168,8 @@ def diagnostic_node(state: MedicalGraphState) -> dict:
 
 def safety_node(state: MedicalGraphState) -> dict:
     """Run SafetyAgent: compliance checks and audit logging."""
-    _, _, safety, _ = get_agents()
+    registry = get_registry()
+    safety = registry.safety
 
     logger.info(f"[{state['session_id']}] Safety node executing...")
     state_update = {"status": "safety_check"}
@@ -171,9 +196,6 @@ def safety_node(state: MedicalGraphState) -> dict:
     safety.log_audit(report, check)
     state_update["safety_check"] = check
 
-    # ── Human review gate ──
-    # All tumor-positive cases require mandatory radiologist review.
-    # No-tumor cases with safety flags also require review.
     if report.tumor_detected or check.requires_human_review:
         state_update["status"] = "pending_review"
         state_update["review_status"] = "pending_review"
@@ -183,43 +205,35 @@ def safety_node(state: MedicalGraphState) -> dict:
         )
     else:
         state_update["status"] = "completed"
-        state_update["review_status"] = "approved"  # auto-approve no-tumor/clean
+        state_update["review_status"] = "approved"
 
     return state_update
 
 
 # ─── Conditional routing ───
 
-
 def route_after_vision(state: MedicalGraphState) -> str:
     """Decide next node after vision completes."""
     if state.get("status") == "failed":
         return END
-
     vision_result = state.get("vision_result")
     if vision_result is None:
         return END
-
     return "diagnostic"
 
 
 # ─── Build the graph ───
 
-
 def build_graph() -> StateGraph:
     """Construct the medical analysis StateGraph."""
     graph = StateGraph(MedicalGraphState)
-
     graph.add_node("vision", vision_node)
     graph.add_node("diagnostic", diagnostic_node)
     graph.add_node("safety", safety_node)
-
     graph.set_entry_point("vision")
-
     graph.add_conditional_edges("vision", route_after_vision)
     graph.add_edge("diagnostic", "safety")
     graph.add_edge("safety", END)
-
     return graph
 
 
@@ -247,3 +261,32 @@ def create_initial_state(patient) -> MedicalGraphState:
         status="pending",
         errors=[],
     )
+
+
+# ─── Backward-compatible aliases ───
+
+def get_agents(settings: Optional[Settings] = None):
+    """
+    Deprecated: Use get_registry() instead.
+
+    Kept for backward compatibility during migration. Returns a tuple of
+    (vision, diagnostic, safety, dialogue) agents.
+    """
+    import warnings
+    warnings.warn(
+        "get_agents() is deprecated, use get_registry() instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    registry = get_registry()
+    return (registry.vision, registry.diagnostic, registry.safety, registry.dialogue)
+
+
+def load_models(settings: Optional[Settings] = None) -> None:
+    """
+    Backward-compatible alias for registry.load_models().
+
+    Deprecated: Use registry.load_models() instead.
+    """
+    registry = get_registry()
+    registry.load_models()

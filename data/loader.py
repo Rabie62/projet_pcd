@@ -115,7 +115,7 @@ class BRISCDataLoader:
             try:
                 mask = self.load_mask(mask_path)
                 logger.info(f"Auto-loaded mask for {image_path.name}")
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 logger.warning(f"Failed to load mask {mask_path}: {e}")
 
         return self.build_patient({

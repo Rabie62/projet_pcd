@@ -120,23 +120,44 @@
           <div *ngIf="submitted && f['username'].errors" class="invalid-feedback animate-slide-down">
             <span *ngIf="f['username'].errors['required']">L'identifiant est requis.</span>
             <span *ngIf="f['username'].errors['minlength']">Au moins 3 caractères requis.</span>
+            <span *ngIf="f['username'].errors['maxlength']">50 caractères maximum.</span>
+            <span *ngIf="f['username'].errors['pattern']">Lettres, chiffres, points, tirets et underscores uniquement.</span>
           </div>
         </div>
 
         <div class="form-group">
           <label for="password">Mot de passe</label>
-          <input 
-            type="password" 
-            id="password" 
-            formControlName="password" 
-            class="form-control" 
+          <input
+            type="password"
+            id="password"
+            formControlName="password"
+            class="form-control"
             [ngClass]="{ 'is-invalid': submitted && f['password'].errors }"
-            placeholder="Min. 6 caractères"
+            placeholder="Min. 8 caractères (majuscule, minuscule, chiffre)"
             autocomplete="new-password"
           />
           <div *ngIf="submitted && f['password'].errors" class="invalid-feedback animate-slide-down">
             <span *ngIf="f['password'].errors['required']">Le mot de passe est requis.</span>
-            <span *ngIf="f['password'].errors['minlength']">Au moins 6 caractères requis.</span>
+            <span *ngIf="f['password'].errors['minlength']">Au moins 8 caractères requis.</span>
+            <span *ngIf="f['password'].errors['maxlength']">128 caractères maximum.</span>
+            <span *ngIf="f['password'].errors['pattern']">Doit contenir au moins une majuscule, une minuscule et un chiffre.</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="confirmPassword">Confirmer le mot de passe</label>
+          <input
+            type="password"
+            id="confirmPassword"
+            formControlName="confirmPassword"
+            class="form-control"
+            [ngClass]="{ 'is-invalid': submitted && (f['confirmPassword'].errors || registerForm.errors?.['mismatch']) }"
+            placeholder="Retapez le mot de passe"
+            autocomplete="new-password"
+          />
+          <div *ngIf="submitted && (f['confirmPassword'].errors || registerForm.errors?.['mismatch'])" class="invalid-feedback animate-slide-down">
+            <span *ngIf="f['confirmPassword']?.errors?.['required']">La confirmation est requise.</span>
+            <span *ngIf="registerForm.errors?.['mismatch']">Les mots de passe ne correspondent pas.</span>
           </div>
         </div>
       </div>

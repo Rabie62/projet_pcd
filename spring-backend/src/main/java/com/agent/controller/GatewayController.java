@@ -1,11 +1,11 @@
 package com.agent.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpStatusCodeException;
@@ -17,14 +17,16 @@ import java.net.URISyntaxException;
 import java.util.Enumeration;
 
 @RestController
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class GatewayController {
 
-    @Value("${python.service.url:http://medical-ai-agent:8000}")
-    private String pythonServiceUrl;
+    private final String pythonServiceUrl;
+    private final RestTemplate restTemplate;
 
-    @Autowired
-    private RestTemplate restTemplate;
+    public GatewayController(RestTemplate restTemplate,
+                             @Value("${python.service.url:http://medical-ai-agent:8000}") String pythonServiceUrl) {
+        this.restTemplate = restTemplate;
+        this.pythonServiceUrl = pythonServiceUrl;
+    }
 
     @PostMapping(value = "/api/v1/analyze/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<byte[]> proxyUpload(
@@ -33,10 +35,10 @@ public class GatewayController {
             @RequestParam(value = "clinical_notes", required = false) String clinicalNotes) throws Exception {
 
         String urlString = pythonServiceUrl + "/api/v1/analyze/upload";
-        
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
-        
+
         org.springframework.util.MultiValueMap<String, Object> body = new org.springframework.util.LinkedMultiValueMap<>();
         body.add("file", file.getResource());
         if (patientId != null) body.add("patient_id", patientId);
@@ -52,7 +54,6 @@ public class GatewayController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "uploaded_by", required = false) String uploadedBy) throws Exception {
 
-        // FastAPI expects uploaded_by as a query parameter, not a form field
         String urlString = pythonServiceUrl + "/api/v1/knowledge/upload";
         if (uploadedBy != null) {
             urlString += "?uploaded_by=" + java.net.URLEncoder.encode(uploadedBy, "UTF-8");
@@ -75,9 +76,23 @@ public class GatewayController {
         }
     }
 
-    @RequestMapping(value = "/api/v1/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE})
+    @RequestMapping(
+        value = {
+            "/api/v1/patients", "/api/v1/patients/**",
+            "/api/v1/consultations", "/api/v1/consultations/**",
+            "/api/v1/medecins", "/api/v1/medecins/**",
+            "/api/v1/sessions", "/api/v1/sessions/**",
+            "/api/v1/summary/**",
+            "/api/v1/overlay/**",
+            "/api/v1/health",
+            "/api/v1/chat",
+            "/api/v1/review/**",
+            "/api/v1/analyze", "/api/v1/analyze/**",
+            "/api/v1/knowledge", "/api/v1/knowledge/**"
+        },
+        method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE}
+    )
     public ResponseEntity<byte[]> proxyRequest(HttpServletRequest request, @RequestBody(required = false) byte[] body) throws URISyntaxException {
-        
         String requestUri = request.getRequestURI();
         String queryString = request.getQueryString();
         String urlString = pythonServiceUrl + requestUri;
@@ -91,9 +106,9 @@ public class GatewayController {
         Enumeration<String> headerNames = request.getHeaderNames();
         while (headerNames.hasMoreElements()) {
             String headerName = headerNames.nextElement();
-            if(!headerName.equalsIgnoreCase("host") 
-               && !headerName.equalsIgnoreCase("content-length")
-               && !headerName.equalsIgnoreCase("transfer-encoding")){
+            if (!headerName.equalsIgnoreCase("host")
+                    && !headerName.equalsIgnoreCase("content-length")
+                    && !headerName.equalsIgnoreCase("transfer-encoding")) {
                 headers.add(headerName, request.getHeader(headerName));
             }
         }
@@ -107,5 +122,10 @@ public class GatewayController {
                     .headers(e.getResponseHeaders())
                     .body(e.getResponseBodyAsByteArray());
         }
+    }
+
+    @PostMapping(value = "/api/v1/chat/stream", produces = "text/event-stream")
+    public ResponseEntity<byte[]> proxyStream(HttpServletRequest request, @RequestBody(required = false) byte[] body) throws URISyntaxException {
+        return proxyRequest(request, body);
     }
 }

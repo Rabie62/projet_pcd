@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from loguru import logger
 from config.settings import Settings, get_settings
-from agents.graph import compile_graph, create_initial_state, load_models, get_agents
+from agents.graph import compile_graph, create_initial_state, load_models, get_registry, AgentRegistry
 from agents.graph_state import MedicalGraphState
 from agents.safety import AuditEntry
 from data.loader import BRISCDataLoader, BRISCPatient
@@ -87,8 +87,7 @@ class ControllerAgent:
 
         # Set dialogue context if a report was generated
         if final_state.get("diagnostic_report"):
-            _, _, _, dialogue_agent = get_agents()
-            dialogue_agent.set_report_context(final_state["diagnostic_report"])
+            get_registry().dialogue.set_report_context(final_state["diagnostic_report"])
 
         # Auto-link scan to patient record if patient_id provided
         if patient_id and final_state.get("diagnostic_report"):
@@ -201,14 +200,14 @@ class ControllerAgent:
         Returns:
             Natural language response from the dialogue LLM
         """
-        _, _, _, dialogue_agent = get_agents()
+        dialogue = get_registry().dialogue
 
         if session_id and session_id in self.sessions:
             session = self.sessions[session_id]
             if session.get("diagnostic_report"):
-                dialogue_agent.set_report_context(session["diagnostic_report"])
+                dialogue.set_report_context(session["diagnostic_report"])
 
-        return dialogue_agent.chat(query)
+        return dialogue.chat(query)
 
     def chat_stream(self, query: str, session_id: Optional[str] = None):
         """
@@ -221,14 +220,14 @@ class ControllerAgent:
         Yields:
             Text chunks from the dialogue LLM
         """
-        _, _, _, dialogue_agent = get_agents()
+        dialogue = get_registry().dialogue
 
         if session_id and session_id in self.sessions:
             session = self.sessions[session_id]
             if session.get("diagnostic_report"):
-                dialogue_agent.set_report_context(session["diagnostic_report"])
+                dialogue.set_report_context(session["diagnostic_report"])
 
-        yield from dialogue_agent.chat_stream(query)
+        yield from dialogue.chat_stream(query)
 
     def get_session(self, session_id: str) -> Optional[MedicalGraphState]:
         """Retrieve an analysis session by its ID."""
@@ -250,8 +249,7 @@ class ControllerAgent:
 
     def get_disclaimer(self) -> str:
         """Get the safety disclaimer text."""
-        _, _, safety_agent, _ = get_agents()
-        return safety_agent.get_disclaimer()
+        return get_registry().safety.get_disclaimer()
 
     # ── Human Review Gate ─────────────────────────────────────────────
 
@@ -288,7 +286,7 @@ class ControllerAgent:
         session["status"] = "completed"
 
         # Log the approval in the audit trail
-        _, _, safety_agent, _ = get_agents()
+        safety = get_registry().safety
         report = session.get("diagnostic_report")
         safety_check = session.get("safety_check")
         if report and safety_check:
@@ -297,15 +295,15 @@ class ControllerAgent:
                 patient_id=session.get("patient_id", "unknown"),
                 action="radiologist_approval",
                 input_hash="N/A",
-                model_version=safety_agent.MODEL_VERSION,
+                model_version=safety.MODEL_VERSION,
                 results_summary=f"Report approved by {reviewer_name}",
                 confidence=report.classification_confidence,
                 safety_check=asdict(safety_check),
                 flags=[],
                 metadata={"reviewer": reviewer_name},
             )
-            safety_agent.audit_log.append(entry)
-            safety_agent.persist_audit_entry(entry)
+            safety.audit_log.append(entry)
+            safety.persist_audit_entry(entry)
 
         logger.info(
             f"[{session_id}] Report APPROVED by {reviewer_name}"
@@ -355,7 +353,7 @@ class ControllerAgent:
         session["status"] = "rejected"
 
         # Log the rejection in the audit trail
-        _, _, safety_agent, _ = get_agents()
+        safety = get_registry().safety
         report = session.get("diagnostic_report")
         safety_check = session.get("safety_check")
         if report and safety_check:
@@ -364,15 +362,15 @@ class ControllerAgent:
                 patient_id=session.get("patient_id", "unknown"),
                 action="radiologist_rejection",
                 input_hash="N/A",
-                model_version=safety_agent.MODEL_VERSION,
+                model_version=safety.MODEL_VERSION,
                 results_summary=f"Report rejected by {reviewer_name}: {reason}",
                 confidence=report.classification_confidence,
                 safety_check=asdict(safety_check),
                 flags=[f"REJECTED: {reason}"],
                 metadata={"reviewer": reviewer_name, "reason": reason},
             )
-            safety_agent.audit_log.append(entry)
-            safety_agent.persist_audit_entry(entry)
+            safety.audit_log.append(entry)
+            safety.persist_audit_entry(entry)
 
         logger.info(
             f"[{session_id}] Report REJECTED by {reviewer_name}: {reason}"

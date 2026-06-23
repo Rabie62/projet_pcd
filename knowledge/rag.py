@@ -117,9 +117,13 @@ class KnowledgeRAG:
         self.ocr_reader_instance = None
         self.is_available = False
 
-        self.init_components()
-        self.is_available = True
-        self.load_registry()
+        try:
+            self.init_components()
+            self.is_available = True
+            self.load_registry()
+        except Exception as e:
+            logger.warning(f"KnowledgeRAG initialization failed: {e}. RAG will be unavailable.")
+            self.is_available = False
 
     def init_components(self) -> None:
         """Initialise encoder and Qdrant client."""
