@@ -87,7 +87,7 @@ class ControllerAgent:
 
         # Set dialogue context if a report was generated
         if final_state.get("diagnostic_report"):
-            get_registry().dialogue.set_report_context(final_state["diagnostic_report"])
+            get_registry().dialogue.set_report_context(final_state["diagnostic_report"], session_id=session_id)
 
         # Auto-link scan to patient record if patient_id provided
         if patient_id and final_state.get("diagnostic_report"):
@@ -205,9 +205,9 @@ class ControllerAgent:
         if session_id and session_id in self.sessions:
             session = self.sessions[session_id]
             if session.get("diagnostic_report"):
-                dialogue.set_report_context(session["diagnostic_report"])
+                dialogue.set_report_context(session["diagnostic_report"], session_id=session_id)
 
-        return dialogue.chat(query)
+        return dialogue.chat(query, session_id=session_id)
 
     def chat_stream(self, query: str, session_id: Optional[str] = None):
         """
@@ -225,9 +225,9 @@ class ControllerAgent:
         if session_id and session_id in self.sessions:
             session = self.sessions[session_id]
             if session.get("diagnostic_report"):
-                dialogue.set_report_context(session["diagnostic_report"])
+                dialogue.set_report_context(session["diagnostic_report"], session_id=session_id)
 
-        yield from dialogue.chat_stream(query)
+        yield from dialogue.chat_stream(query, session_id=session_id)
 
     def get_session(self, session_id: str) -> Optional[MedicalGraphState]:
         """Retrieve an analysis session by its ID."""

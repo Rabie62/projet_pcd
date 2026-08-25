@@ -219,6 +219,22 @@ def chat_stream(request: ChatRequest):
     )
 
 
+@router.get("/chat/history/{session_id}", tags=["Dialogue"])
+def get_chat_history(session_id: str):
+    """Get chat conversation history for a specific session."""
+    from agents.graph import get_registry
+    history = get_registry().dialogue.get_session_history(session_id)
+    return {"session_id": session_id, "history": history}
+
+
+@router.delete("/chat/history/{session_id}", tags=["Dialogue"])
+def clear_chat_history(session_id: str):
+    """Clear chat conversation history for a specific session."""
+    from agents.graph import get_registry
+    get_registry().dialogue.clear_session_history(session_id)
+    return {"session_id": session_id, "status": "cleared"}
+
+
 # ── Visualization ───────────────────────────────────────────────────────
 
 @router.get(
@@ -249,10 +265,41 @@ def get_summary(session_id: str):
 
     viz = get_visualizer()
     gt_mask = getattr(vision_result, 'ground_truth_mask', None)
+    gradcam_map = getattr(vision_result, 'gradcam_map', None)
     png = viz.generate_summary(
         vision_result.preprocessed_image,
         seg_mask=gt_mask,
         pred_mask=vision_result.segmentation_mask,
+        gradcam_map=gradcam_map,
+    )
+    return Response(content=png, media_type="image/png")
+
+
+@router.get(
+    "/summary/gradcam/{session_id}",
+    tags=["Visualization"],
+    responses={200: {"content": {"image/png": {}}}},
+)
+def get_gradcam_overlay(session_id: str):
+    """Get standalone Grad-CAM visual explainability heatmap overlay."""
+    ctrl = get_controller()
+    session = ctrl.get_session(session_id)
+    if session is None:
+        raise NotFoundError(f"Session {session_id} not found")
+
+    vision_result = session.get("vision_result")
+    if vision_result is None:
+        raise ValidationError("No results found")
+
+    gradcam_map = getattr(vision_result, 'gradcam_map', None)
+    if gradcam_map is None:
+        raise NotFoundError("Grad-CAM map not available for this session")
+
+    viz = get_visualizer()
+    png = viz.generate_gradcam_overlay(
+        vision_result.preprocessed_image,
+        gradcam_map=gradcam_map,
+        alpha=0.5,
     )
     return Response(content=png, media_type="image/png")
 

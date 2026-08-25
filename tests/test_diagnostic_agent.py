@@ -11,17 +11,15 @@ from agents.vision import VisionResult, TumorRegion
 
 @pytest.fixture
 def diagnostic_agent():
-    """Create a DiagnosticAgent with LLM and ICD11 mocked."""
-    with patch("knowledge.icd11.ICD11Client") as mock_icd:
-        mock_icd.return_value.available = False
-        agent = DiagnosticAgent(
-            llm_report_enabled=False,
-            rag_system=None,
-            dialogue_agent=MagicMock(),  # placeholder, will mock generate_llm_summary
-        )
-        # Mock the LLM summary generation to avoid torch dependency
-        agent.generate_llm_summary = MagicMock(return_value="Rapport de test généré.")
-        yield agent
+    """Create a DiagnosticAgent with LLM mocked."""
+    agent = DiagnosticAgent(
+        llm_report_enabled=False,
+        rag_system=None,
+        dialogue_agent=MagicMock(),  # placeholder, will mock generate_llm_summary
+    )
+    # Mock the LLM summary generation to avoid torch dependency
+    agent.generate_llm_summary = MagicMock(return_value="Rapport de test généré.")
+    yield agent
 
 
 def _make_vision_result(

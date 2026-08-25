@@ -74,8 +74,6 @@ class DiagnosticAgent:
         self.llm_report_enabled = llm_report_enabled
         self.rag_system = rag_system
         self.dialogue_agent = dialogue_agent
-        from knowledge.icd11 import ICD11Client
-        self.icd11 = ICD11Client()
 
     def extract_features(self, vision_result: VisionResult) -> TumorFeatures:
         features = TumorFeatures()
@@ -151,28 +149,10 @@ class DiagnosticAgent:
         if vision_result.tumor_class_confidence < 0.85:
             flags.append("Confiance IA modérée")
 
-        # Récupération codes CIM-11
-        icd11_codes = []
-        if self.icd11.available:
-            results = self.icd11.search(f"{vision_result.tumor_class} brain tumor")
-            for res in results[:5]:
-                raw_id = res.get('id', '')
-                segments = [s for s in raw_id.split('/') if s]
-                entity_id = None
-                for seg in reversed(segments):
-                    if seg.replace('.', '').isdigit():
-                        entity_id = seg
-                        break
-                if not entity_id:
-                    continue
-                code = self.icd11.get_mms_code(entity_id)
-                if code:
-                    icd11_codes.append(f"{code} ({res.get('title')})")
-
         # GÉNÉRATION DU RAPPORT (LLM avec contexte RAG)
         clinical_summary = self.generate_llm_summary(
             vision_result, features, clinical_grade, flags,
-            clinical_notes, patient_history_context, icd11_codes
+            clinical_notes, patient_history_context
         )
 
         return DiagnosticReport(
@@ -187,7 +167,7 @@ class DiagnosticAgent:
             clinical_summary=clinical_summary,
             recommendations=[],
             flags=flags,
-            icd11_codes=icd11_codes,
+            icd11_codes=[],
         )
 
     # ── System prompt (optimized for Gemma-3 1B-IT — concise & directive) ──
@@ -199,9 +179,7 @@ class DiagnosticAgent:
         "- Pas de salutation ni introduction polie\n"
         "- Citez les mesures numeriques exactes\n"
         "- Si confiance < 85%, mentionnez un diagnostic differentiel\n"
-        "- Integrez les codes CIM-11 et les connaissances RAG fournies\n"
-        "- Terminez par : 'AVERTISSEMENT : Analyse assistee par IA. "
-        "Confirmation clinique par un medecin qualifie requise.'"
+        "- Integrez les connaissances RAG fournies"
     )
 
     # ── Report template (few-shot anchor for output format) ──
@@ -212,8 +190,7 @@ class DiagnosticAgent:
 ## 3. INTERPRETATION ET GRADATION OMS
 {interpretation_section}
 ## 4. CONCLUSION ET RECOMMANDATIONS
-{conclusion_section}
-AVERTISSEMENT : Analyse assistee par IA. Confirmation clinique par un medecin qualifie requise."""
+{conclusion_section}"""
 
     REPORT_EXAMPLE = """## 1. SYNTHESE DES OBSERVATIONS
 Patient sans antecedents notables. IRM cerebrale realisee pour exploration d'une lesion suspectee.
@@ -225,11 +202,9 @@ Classification : Gliome (Confiance IA : 93.2%)
 Grade OMS estime : Grade II-IV (Necessite confirmation histopathologique)
 ## 4. CONCLUSION ET RECOMMANDATIONS
 Diagnostique : Gliome suspecte. Consultation neurochirurgicale urgente recommandee.
-IRM de perfusion souhaitee pour evaluation du grade.
-CIM-11 : 2A00 (Gliome, non specifie)
-AVERTISSEMENT : Analyse assistee par IA. Confirmation clinique par un medecin qualifie requise."""
+IRM de perfusion souhaitee pour evaluation du grade."""
 
-    def generate_llm_summary(self, vision_result, features, clinical_grade, flags, clinical_notes, history, icd11) -> str:
+    def generate_llm_summary(self, vision_result, features, clinical_grade, flags, clinical_notes, history) -> str:
 
         # ── RAG Context ──
         rag_context = ""
@@ -307,9 +282,6 @@ AVERTISSEMENT : Analyse assistee par IA. Confirmation clinique par un medecin qu
         else:
             conclusion_parts.append("Examen normal. Absence de processus expansif detecte.")
 
-        if icd11:
-            conclusion_parts.append("Codes CIM-11 : " + " | ".join(icd11))
-
         conclusion = "\n".join(conclusion_parts) + "\n"
 
         # ── RAG enrichment ──
@@ -346,15 +318,18 @@ AVERTISSEMENT : Analyse assistee par IA. Confirmation clinique par un medecin qu
 
         inputs = self.dialogue_agent.tokenizer.apply_chat_template(
             messages, return_tensors="pt", add_generation_prompt=True, return_dict=True
-        ).to(self.dialogue_agent.model.device)
+        )
+        if hasattr(self.dialogue_agent.model, "device"):
+            inputs = {k: v.to(self.dialogue_agent.model.device) for k, v in inputs.items()}
 
         with torch.no_grad():
             outputs = self.dialogue_agent.model.generate(
                 **inputs,
-                max_new_tokens=1024,
+                max_new_tokens=768,
                 temperature=0.25,
                 do_sample=True,
                 repetition_penalty=1.15,
+                pad_token_id=self.dialogue_agent.tokenizer.pad_token_id or self.dialogue_agent.tokenizer.eos_token_id,
             )
 
         summary = self.dialogue_agent.tokenizer.decode(

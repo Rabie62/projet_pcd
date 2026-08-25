@@ -74,12 +74,13 @@ class DialogueAgent:
         self.rag_system = rag_system
         self.model = None
         self.tokenizer = None
-        from knowledge.icd11 import ICD11Client
-        self.icd11 = ICD11Client(self.settings.icd11)
         self.model_loaded = False
         self.current_report: Optional[DiagnosticReport] = None
-        self.conversation_history: list[dict[str, str]] = []
-        self.icd11_codes: list[str] = []
+        
+        # Per-session multi-turn memory: session_id -> list of {"user": str, "assistant": str}
+        self.session_memories: dict[str, list[dict[str, str]]] = {}
+        # Per-session diagnostic reports: session_id -> DiagnosticReport
+        self.session_reports: dict[str, DiagnosticReport] = {}
 
     def load_model(self) -> None:
         """Load the Gemma 3 1B-IT model"""
@@ -124,42 +125,50 @@ class DialogueAgent:
         self.model_loaded = True
         logger.info("Dialogue Agent model loaded")
 
-    def set_report_context(self, report: DiagnosticReport) -> None:
-        """Set the current diagnostic report as conversation context."""
+    def set_report_context(self, report: DiagnosticReport, session_id: Optional[str] = None) -> None:
+        """Set the diagnostic report as conversation context for a session."""
         self.current_report = report
-        self.conversation_history = []
-        
-        # Fetch ICD-11 codes if tumor detected
-        self.icd11_codes = []
-        if report.tumor_detected and self.icd11.available:
-            query = f"{report.classification} brain tumor"
-            results = self.icd11.search(query)
-            for res in results[:5]:
-                raw_id = res.get('id', '')
-                segments = [s for s in raw_id.split('/') if s]
-                entity_id = None
-                for seg in reversed(segments):
-                    if seg.replace('.', '').isdigit():
-                        entity_id = seg
-                        break
-                if not entity_id:
-                    continue
-                code = self.icd11.get_mms_code(entity_id)
-                if code:
-                    self.icd11_codes.append(f"{code} ({res.get('title')})")
-        
-        logger.debug(f"Set report context for patient {report.patient_id}")
+        if session_id:
+            self.session_reports[session_id] = report
+        logger.debug(f"Set report context for patient {report.patient_id} (session: {session_id})")
 
-    def build_context_prompt(self) -> str:
-        """Build a structured context string from the diagnostic report and RAG.
+    def get_session_report(self, session_id: Optional[str] = None) -> Optional[DiagnosticReport]:
+        """Get the diagnostic report associated with a session."""
+        if session_id and session_id in self.session_reports:
+            return self.session_reports[session_id]
+        return self.current_report
 
-        Uses French labels for consistency with the system prompt.
-        Strips the full clinical summary (already processed) to save tokens.
-        """
-        if self.current_report is None:
+    def get_session_history(self, session_id: Optional[str] = None) -> list[dict[str, str]]:
+        """Get chat history for a session."""
+        key = session_id or "default"
+        return self.session_memories.get(key, [])
+
+    def add_session_exchange(self, session_id: Optional[str], user_query: str, assistant_response: str) -> None:
+        """Add a conversation turn to session memory."""
+        key = session_id or "default"
+        if key not in self.session_memories:
+            self.session_memories[key] = []
+        self.session_memories[key].append({
+            "user": user_query,
+            "assistant": assistant_response,
+        })
+        # Keep up to the last 10 exchanges per session to avoid token overflow
+        if len(self.session_memories[key]) > 10:
+            self.session_memories[key] = self.session_memories[key][-10:]
+
+    def clear_session_history(self, session_id: Optional[str] = None) -> None:
+        """Clear conversation history for a specific session or all sessions."""
+        if session_id:
+            self.session_memories.pop(session_id, None)
+        else:
+            self.session_memories.clear()
+
+    def build_context_prompt(self, session_id: Optional[str] = None) -> str:
+        """Build a structured context string from the diagnostic report and RAG."""
+        report = self.get_session_report(session_id)
+        if report is None:
             return "Aucun rapport de diagnostic disponible."
 
-        report = self.current_report
         parts = [
             f"Patient : {report.patient_id}",
         ]
@@ -183,8 +192,6 @@ class DialogueAgent:
                 parts.append(
                     f"Recommandations : {'; '.join(report.recommendations)}"
                 )
-            if self.icd11_codes:
-                parts.append(f"CIM-11 : {'; '.join(self.icd11_codes)}")
             # Include a short excerpt of the clinical summary (first 300 chars)
             if report.clinical_summary:
                 excerpt = report.clinical_summary[:300]
@@ -219,28 +226,16 @@ class DialogueAgent:
                         rag_scores.append(getattr(chunk, "score"))
 
             if rag_parts:
-                # Truncate RAG content to avoid overwhelming the 1B model
                 rag_text = "\n---\n".join(rag_parts[:3])
                 if len(rag_text) > 600:
                     rag_text = rag_text[:600] + "..."
                 parts.append(f"\nConnaissances cliniques :\n{rag_text}")
-                logger.debug(
-                    f"[RAG] Dialogue: {len(rag_parts)} chunks "
-                    f"(avg: {sum(rag_scores)/max(len(rag_scores),1):.3f})"
-                )
 
         return "\n".join(parts)
 
-    def build_messages(self, user_query: str) -> list[dict[str, str]]:
-        """Build the chat messages list for the model's chat template.
-
-        Structure:
-        - system: short prompt + few-shot examples
-        - context as first user/assistant pair (anchors the report data)
-        - recent history (last 2 exchanges, not 4)
-        - current query
-        """
-        context = self.build_context_prompt()
+    def build_messages(self, user_query: str, session_id: Optional[str] = None) -> list[dict[str, str]]:
+        """Build the chat messages list for the model's chat template with session memory."""
+        context = self.build_context_prompt(session_id)
 
         # ── System message: prompt + few-shot examples ──
         examples_text = ""
@@ -265,8 +260,9 @@ class DialogueAgent:
             "content": f"Rapport enregistre :\n{context}",
         })
 
-        # ── Recent conversation history (last 2 exchanges) ──
-        for exchange in self.conversation_history[-2:]:
+        # ── Multi-turn conversation history for this session (last 4 exchanges) ──
+        history = self.get_session_history(session_id)
+        for exchange in history[-4:]:
             messages.append({"role": "user", "content": exchange["user"]})
             messages.append({"role": "assistant", "content": exchange["assistant"]})
 
@@ -275,20 +271,21 @@ class DialogueAgent:
         return messages
 
     @torch.no_grad()
-    def chat(self, user_query: str) -> str:
+    def chat(self, user_query: str, session_id: Optional[str] = None) -> str:
         """
-        Process a doctor's query and generate a response.
+        Process a doctor's query and generate a response with session memory.
 
         Args:
             user_query: natural language question from the doctor
+            session_id: optional unique ID of the analysis session
 
         Returns:
-            Natural language response grounded in the diagnostic report
+            Natural language response grounded in the diagnostic report and chat history
         """
         if not self.model_loaded:
             self.load_model()
 
-        messages = self.build_messages(user_query)
+        messages = self.build_messages(user_query, session_id=session_id)
 
         inputs = self.tokenizer.apply_chat_template(
             messages,
@@ -302,12 +299,12 @@ class DialogueAgent:
 
         outputs = self.model.generate(
             **inputs,
-            max_new_tokens=self.settings.model.llm_max_new_tokens,
+            max_new_tokens=768,
             temperature=self.settings.model.llm_temperature,
             do_sample=True,
             top_p=0.9,
             repetition_penalty=1.15,
-            pad_token_id=self.tokenizer.pad_token_id,
+            pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
         )
 
         response = self.tokenizer.decode(
@@ -319,20 +316,18 @@ class DialogueAgent:
         response = re.sub(r'\[RAG Metrics:.*?\]', '', response).strip()
         response = re.sub(r'Requete RAG:.*?\n', '', response).strip()
 
-        self.conversation_history.append({
-            "user": user_query,
-            "assistant": response,
-        })
+        self.add_session_exchange(session_id, user_query, response)
 
         return response
 
     @torch.no_grad()
-    def chat_stream(self, user_query: str):
+    def chat_stream(self, user_query: str, session_id: Optional[str] = None):
         """
-        Process a doctor's query and generate a streamed response.
+        Process a doctor's query and generate a streamed response with session memory.
 
         Args:
             user_query: natural language question from the doctor
+            session_id: optional unique ID of the analysis session
 
         Yields:
             Text chunks as they are generated by the model
@@ -340,7 +335,7 @@ class DialogueAgent:
         if not self.model_loaded:
             self.load_model()
 
-        messages = self.build_messages(user_query)
+        messages = self.build_messages(user_query, session_id=session_id)
 
         inputs = self.tokenizer.apply_chat_template(
             messages,
@@ -361,12 +356,12 @@ class DialogueAgent:
         generation_kwargs = dict(
             **inputs,
             streamer=streamer,
-            max_new_tokens=self.settings.model.llm_max_new_tokens,
+            max_new_tokens=768,
             temperature=self.settings.model.llm_temperature,
             do_sample=True,
             top_p=0.9,
             repetition_penalty=1.15,
-            pad_token_id=self.tokenizer.pad_token_id,
+            pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
         )
 
         thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
@@ -377,12 +372,10 @@ class DialogueAgent:
             full_response += new_text
             yield new_text
 
-        # Record the conversation history after stream completes
+        # Record the conversation history into session memory after stream completes
         cleaned = re.sub(r'\[RAG Metrics:.*?\]', '', full_response).strip()
-        self.conversation_history.append({
-            "user": user_query,
-            "assistant": cleaned,
-        })
+        cleaned = re.sub(r'Requete RAG:.*?\n', '', cleaned).strip()
+        self.add_session_exchange(session_id, user_query, cleaned)
 
     def generate_summary(self) -> str:
         """Generate a natural language summary of the diagnostic findings."""

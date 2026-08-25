@@ -72,13 +72,15 @@ class SegmentationModel:
 
     @torch.no_grad()
     def predict_with_probabilities(
-        self, image_tensor: torch.Tensor, **kwargs
+        self, image_tensor: torch.Tensor, postprocess: bool = True, min_component_size: int = 30, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Run segmentation and return both predictions and probabilities.
 
         Args:
             image_tensor: (C, H, W) or (1, C, H, W) float tensor
+            postprocess: Whether to apply connected-component filtering to eliminate small noise
+            min_component_size: Minimum pixel count for a valid tumor component
 
         Returns:
             (preds, probs) where:
@@ -92,5 +94,40 @@ class SegmentationModel:
         logits = self.model(image_tensor)  # (1, 2, H, W)
         probs = torch.softmax(logits, dim=1)
         preds = torch.argmax(logits, dim=1, keepdim=True)  # (1, 1, H, W)
+
+        if postprocess:
+            preds_np = preds.squeeze().cpu().numpy()
+            cleaned_np = self.postprocess_mask(preds_np, min_size=min_component_size)
+            preds = torch.from_numpy(cleaned_np).to(self.device).unsqueeze(0).unsqueeze(0)
+
         return preds, probs
+
+    @staticmethod
+    def postprocess_mask(mask: np.ndarray, min_size: int = 30) -> np.ndarray:
+        """
+        Post-process binary segmentation mask using connected-component filtering.
+        Removes isolated spurious noise regions smaller than min_size pixels.
+        """
+        import numpy as np
+        from scipy.ndimage import label, binary_fill_holes
+
+        if not np.any(mask == 1):
+            return mask
+
+        binary_mask = (mask == 1).astype(np.uint8)
+        labeled_array, num_features = label(binary_mask)
+
+        if num_features == 0:
+            return mask
+
+        cleaned = np.zeros_like(mask)
+        for i in range(1, num_features + 1):
+            component = (labeled_array == i)
+            if np.sum(component) >= min_size:
+                # Keep component and fill tiny interior holes
+                filled = binary_fill_holes(component)
+                cleaned[filled] = 1
+
+        return cleaned
+
 

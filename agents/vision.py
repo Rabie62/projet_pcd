@@ -47,6 +47,7 @@ class VisionResult:
     original_shape: tuple[int, ...]
     pixel_spacing: tuple[float, ...]
     ground_truth_mask: Optional[np.ndarray] = None
+    gradcam_map: Optional[np.ndarray] = None
     errors: list[str] = field(default_factory=list)
 
 
@@ -184,10 +185,11 @@ class VisionAgent:
         tumor_regions = self.extract_tumor_regions(segmentation_mask, spacing)
         tumor_detected = len(tumor_regions) > 0
 
-        # 4. 2D Classification
+        # 4. 2D Classification & Grad-CAM Explainability
         tumor_class = None
         tumor_confidence = 0.0
         tumor_probabilities: dict[str, float] = {}
+        gradcam_map = None
 
         if self.classifier is not None:
             class_idx, confidence, probs = self.classifier.predict(
@@ -196,6 +198,15 @@ class VisionAgent:
             tumor_class = TumorClassifier.CLASS_NAMES[class_idx]
             tumor_confidence = confidence
             tumor_probabilities = probs
+
+            # Generate Grad-CAM map for visual explainability
+            try:
+                from interpretability.gradcam import GradCAM
+                cam_generator = GradCAM(self.classifier)
+                gradcam_map = cam_generator.generate_cam(input_tensor, target_class=class_idx)
+                cam_generator.remove_hooks()
+            except Exception as e:
+                logger.warning(f"Grad-CAM generation failed: {e}")
 
         return VisionResult(
             patient_id=patient.patient_id,
@@ -210,5 +221,6 @@ class VisionAgent:
             original_shape=patient.image.shape,
             pixel_spacing=spacing,
             ground_truth_mask=patient.mask,
+            gradcam_map=gradcam_map,
             errors=errors,
         )

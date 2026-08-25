@@ -111,22 +111,6 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
-class ICD11Config:
-    """ICD-11 API configuration - Using the latest release (2026)."""
-    client_id: Optional[str] = field(default_factory=lambda: os.environ.get("ICD11_CLIENT_ID"))
-    client_secret: Optional[str] = field(default_factory=lambda: os.environ.get("ICD11_CLIENT_SECRET"))
-    
-    api_url: str = "https://id.who.int"
-    token_url: str = "https://icdaccessmanagement.who.int/connect/token"
-    
-    # Latest ICD-11 Release
-    release: str = "2026-01"
-    
-    # Alternative: Use this if you want to always fetch the latest available
-    use_latest: bool = False
-
-
-@dataclass(frozen=True)
 class Settings:
     """Root settings container."""
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -134,7 +118,6 @@ class Settings:
     api: APIConfig = field(default_factory=APIConfig)
     paths: PathConfig = field(default_factory=PathConfig)
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
-    icd11: ICD11Config = field(default_factory=ICD11Config)
 
     def __post_init__(self) -> None:
         self.paths.ensure_dirs()
@@ -173,5 +156,4 @@ def get_settings() -> Settings:
         inference=inference,
         api=api,
         db=DatabaseConfig(),
-        icd11=ICD11Config(),
     )

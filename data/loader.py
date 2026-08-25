@@ -153,8 +153,6 @@ class BRISCDataLoader:
 
     def load_image(self, path: Path) -> tuple[np.ndarray, tuple[float, ...]]:
         """Load RGB image."""
-        
-        # Standard image
         img = Image.open(path).convert("RGB")
         img = img.resize(self.image_size, Image.BILINEAR)
         arr = np.array(img, dtype=np.float32)

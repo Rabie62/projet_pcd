@@ -37,15 +37,17 @@ class BRISCVisualizer:
         mri_image: np.ndarray,
         seg_mask: Optional[np.ndarray] = None,
         pred_mask: Optional[np.ndarray] = None,
+        gradcam_map: Optional[np.ndarray] = None,
     ) -> bytes:
         """
-        Generate a summary grid (Image, Ground Truth, Prediction).
-        Adjusts to 2 or 3 panels based on seg_mask availability.
+        Generate a summary grid (Image, Ground Truth, Prediction, Grad-CAM).
+        Adjusts panels based on data availability.
         
         Args:
             mri_image: (3, H, W) or (H, W) image
             seg_mask: (H, W) ground truth
             pred_mask: (H, W) model prediction
+            gradcam_map: (H, W) Grad-CAM heatmap
         """
         # Determine number of panels
         panels = []
@@ -54,6 +56,8 @@ class BRISCVisualizer:
             panels.append(("Ground Truth", seg_mask, "mask"))
         if pred_mask is not None:
             panels.append(("AI Prediction", pred_mask, "mask"))
+        if gradcam_map is not None:
+            panels.append(("Grad-CAM (XAI)", gradcam_map, "gradcam"))
             
         n_panels = len(panels)
         fig, axes = plt.subplots(1, n_panels, figsize=(4 * n_panels, 4), dpi=self.dpi)
@@ -73,6 +77,17 @@ class BRISCVisualizer:
                     display_img = (display_img - display_img.min()) / (display_img.max() - display_img.min() + 1e-8)
                 
                 axes[i].imshow(display_img, cmap="gray" if display_img.ndim == 2 else None)
+            elif dtype == "gradcam":
+                # Base image + GradCAM colormap
+                if mri_image.ndim == 3 and mri_image.shape[0] == 3:
+                    base_img = mri_image.transpose(1, 2, 0)
+                else:
+                    base_img = mri_image
+                if base_img.max() > 1.0 or base_img.min() < 0.0:
+                    base_img = (base_img - base_img.min()) / (base_img.max() - base_img.min() + 1e-8)
+                
+                axes[i].imshow(base_img, cmap="gray" if base_img.ndim == 2 else None)
+                axes[i].imshow(data, cmap="jet", alpha=0.5)
             else:
                 # Mask overlay on original image
                 if mri_image.ndim == 3 and mri_image.shape[0] == 3:
@@ -97,6 +112,35 @@ class BRISCVisualizer:
         buf.seek(0)
         return buf.read()
 
+    def generate_gradcam_overlay(
+        self,
+        mri_image: np.ndarray,
+        gradcam_map: np.ndarray,
+        alpha: float = 0.5,
+    ) -> bytes:
+        """Generate standalone Grad-CAM heatmap blended with MRI image."""
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=self.dpi)
+        fig.patch.set_facecolor("black")
+
+        if mri_image.ndim == 3 and mri_image.shape[0] == 3:
+            base_img = mri_image.transpose(1, 2, 0)
+        else:
+            base_img = mri_image
+
+        if base_img.max() > 1.0 or base_img.min() < 0.0:
+            base_img = (base_img - base_img.min()) / (base_img.max() - base_img.min() + 1e-8)
+
+        ax.imshow(base_img, cmap="gray" if base_img.ndim == 2 else None)
+        ax.imshow(gradcam_map, cmap="jet", alpha=alpha)
+        ax.axis("off")
+
+        plt.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight", facecolor="black", pad_inches=0)
+        plt.close(fig)
+        buf.seek(0)
+        return buf.read()
+
     def _create_segmentation_overlay(self, mask_2d: np.ndarray, alpha_mult: float = 0.6) -> np.ndarray:
         """Helper to create an RGBA overlay from a segmentation slice."""
         overlay = np.zeros((*mask_2d.shape, 4))
@@ -114,4 +158,5 @@ class BRISCVisualizer:
         with open(path, "wb") as f:
             f.write(data)
         logger.info(f"Visualization saved to {path}")
+
 
