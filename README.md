@@ -1,4 +1,4 @@
-# 🧠 Medical AI Hub — Plateforme d'Analyse d'IRM Cérébrales par IA Multi-Agents
+# 🧠 NeuroScan AI — Plateforme d'Analyse d'IRM Cérébrales par IA Multi-Agents
 
 **Système Hospitalier Intelligent pour la Détection, Segmentation 2D, Classification Multiclasse, Explicabilité (Grad-CAM) et Dialogue Clinique.**
 
@@ -8,7 +8,7 @@ Développé et optimisé sur le dataset **BRISC 2025** (coupes axiales IRM pond�
 
 ## 📋 Aperçu du Projet
 
-**Medical AI Hub** est une station de travail clinique avancée conçue pour assister les neuro-radiologues, neurologues et neurochirurgiens. Elle combine des modèles de vision par ordinateur de pointe, une architecture multi-agents orchestrée par **LangGraph**, un assistant conversationnel médical local, une base de connaissances vectorielle **RAG (Qdrant)**, et une passerelle sécurisée **Spring Boot + JWT** connectée à un frontend moderne **Angular 19**.
+**NeuroScan AI** est une station de travail clinique avancée conçue pour assister les neuro-radiologues, neurologues et neurochirurgiens. Elle combine des modèles de vision par ordinateur de pointe, une architecture multi-agents orchestrée par **LangGraph**, un assistant conversationnel médical local, une base de connaissances vectorielle **RAG (Qdrant)**, et une passerelle sécurisée **Spring Boot + JWT** connectée à un frontend moderne **Angular 19**.
 
 L'application respecte les exigences de traçabilité et de supervision humaine imposées par l'**Article 14 de l'EU AI Act** (Human-in-the-Loop).
 

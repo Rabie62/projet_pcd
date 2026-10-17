@@ -5,7 +5,7 @@
         <lucide-icon [name]="ActivityIcon" [size]="22"></lucide-icon>
       </div>
       <div class="sidebar-brand-text">
-        <span class="brand-title">MEDICAL AI HUB</span>
+        <span class="brand-title">NEUROSCAN AI</span>
       </div>
     </div>
 
@@ -38,10 +38,10 @@
 
     <!-- Practician profile badge -->
     <div class="sidebar-practician-card">
-      <div class="practician-avatar">SM</div>
+      <div class="practician-avatar">{{ authService.getUserInitials() }}</div>
       <div class="practician-info">
-        <span class="practician-name">Dr. Sarah Mansouri</span>
-        <span class="practician-role">Neuro-Radiologue</span>
+        <span class="practician-name">{{ authService.getUserDisplayName() }}</span>
+        <span class="practician-role">{{ authService.getUserRole() }}</span>
       </div>
     </div>
 

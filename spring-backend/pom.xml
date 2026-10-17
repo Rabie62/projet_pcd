@@ -12,7 +12,7 @@
     <artifactId>spring-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>spring-backend</name>
-    <description>Spring Boot Backend Gateway for Medical AI Agent</description>
+    <description>Spring Boot Backend Gateway for NeuroScan AI</description>
     <properties>
         <java.version>17</java.version>
     </properties>

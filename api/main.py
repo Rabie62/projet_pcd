@@ -1,5 +1,5 @@
 """
-FastAPI application for the Medical AI Agent.
+FastAPI application for NeuroScan AI.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from api.errors import AppError
 async def lifespan(app: FastAPI):
     """Application lifespan handler — loads models at startup."""
     settings = get_settings()
-    logger.info("Starting Medical AI Agent API...")
+    logger.info("Starting NeuroScan AI API...")
 
     # Initialize the database (create tables if needed)
     init_database()
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("API ready. Models loaded.")
     yield
-    logger.info("Shutting down Medical AI Agent API.")
+    logger.info("Shutting down NeuroScan AI API.")
 
 
 def create_app() -> FastAPI:
@@ -45,7 +45,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="Medical AI Agent — Brain Tumor Analysis",
+        title="NeuroScan AI — Brain Tumor Analysis",
         description=(
             "Multi-agent AI system for brain tumor detection, segmentation, "
             "classification, and clinical reporting from MRI scans.\n\n"

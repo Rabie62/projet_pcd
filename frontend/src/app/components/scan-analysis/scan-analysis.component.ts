@@ -8,6 +8,7 @@ import { Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ErrorHandlerService } from '../../services/error-handler.service';
 import { PatientService } from '../../services/patient.service';
+import { AuthService } from '../../services/auth.service';
 import { AnalysisResponse, Patient } from '../../models';
 
 @Component({
@@ -60,7 +61,7 @@ export class ScanAnalysisComponent implements OnInit, OnDestroy {
   // EU AI Act Art. 14 Human-in-the-Loop Review
   reviewLoading = false;
   reviewStatus: 'pending_review' | 'approved' | 'rejected' | null = null;
-  reviewerName = 'Dr. Sarah Mansouri';
+  reviewerName = 'Dr. Praticien';
   reviewMessage: string | null = null;
   showRejectModal = false;
   rejectionReason = '';
@@ -77,11 +78,20 @@ export class ScanAnalysisComponent implements OnInit, OnDestroy {
     private http: HttpClient,
     private sanitizer: DomSanitizer,
     private errorHandler: ErrorHandlerService,
-    private patientService: PatientService
+    private patientService: PatientService,
+    private authService: AuthService
   ) {}
 
   ngOnInit(): void {
+    this.initReviewerName();
     this.loadPatients();
+  }
+
+  private initReviewerName(): void {
+    const displayName = this.authService.getUserDisplayName();
+    if (displayName && displayName !== 'Docteur') {
+      this.reviewerName = displayName;
+    }
   }
 
   loadPatients(): void {
@@ -369,6 +379,7 @@ export class ScanAnalysisComponent implements OnInit, OnDestroy {
             <div style="font-size: 14px; color: #475569; margin-top: 4px;">Rapport d'Analyse IRM Cérébrale</div>
           </div>
           <div class="meta">
+            <div><strong>Praticien :</strong> ${this.reviewerName}</div>
             <div><strong>Patient ID :</strong> ${r.patient_id}</div>
             <div><strong>Date :</strong> ${new Date().toLocaleDateString('fr-FR')} ${new Date().toLocaleTimeString('fr-FR')}</div>
           </div>

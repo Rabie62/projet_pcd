@@ -13,7 +13,7 @@ import { ToastContainerComponent } from './components/toast-container/toast-cont
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'Medical AI Hub';
+  title = 'NeuroScan AI';
 
   readonly ActivityIcon = Activity;
   readonly UsersIcon = Users;

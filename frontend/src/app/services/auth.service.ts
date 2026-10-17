@@ -38,8 +38,15 @@ export class AuthService {
     private http: HttpClient,
     private router: Router
   ) {
-    // Note: JWT is stored in httpOnly cookie by server
-    // We don't need to restore from cookie since browser sends it automatically
+    const savedUser = localStorage.getItem('auth_user');
+    if (savedUser) {
+      try {
+        const user: AuthUser = JSON.parse(savedUser);
+        this.currentUserSubject.next(user);
+      } catch (e) {
+        localStorage.removeItem('auth_user');
+      }
+    }
   }
 
   login(credentials: { username: string; password: string }): Observable<AuthResponse> {
@@ -59,6 +66,7 @@ export class AuthService {
             departement: response.departement,
             username: response.username,
           };
+          localStorage.setItem('auth_user', JSON.stringify(user));
           this.currentUserSubject.next(user);
       }),
       catchError(err => this.handleError(err))
@@ -83,6 +91,7 @@ export class AuthService {
             departement: response.departement,
             username: response.username,
           };
+          localStorage.setItem('auth_user', JSON.stringify(user));
           this.currentUserSubject.next(user);
         }
       }),
@@ -99,6 +108,7 @@ export class AuthService {
 
   private clearAuth(): void {
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_user');
     this.currentUserSubject.next(null);
     this.router.navigate(['/login']);
   }
@@ -113,6 +123,38 @@ export class AuthService {
 
   getCurrentUser(): AuthUser | null {
     return this.currentUserSubject.value;
+  }
+
+  getUserDisplayName(): string {
+    const user = this.currentUserSubject.value;
+    if (!user) return 'Docteur';
+    if (user.prenom && user.nom) {
+      return `Dr. ${user.prenom} ${user.nom}`;
+    }
+    if (user.nom) {
+      return `Dr. ${user.nom}`;
+    }
+    if (user.username) {
+      return `Dr. ${user.username}`;
+    }
+    return 'Docteur';
+  }
+
+  getUserInitials(): string {
+    const user = this.currentUserSubject.value;
+    if (!user) return 'DR';
+    const first = user.prenom?.trim()?.[0] || '';
+    const last = user.nom?.trim()?.[0] || '';
+    const combined = (first + last).toUpperCase();
+    if (combined) return combined;
+    if (user.username) return user.username.substring(0, 2).toUpperCase();
+    return 'DR';
+  }
+
+  getUserRole(): string {
+    const user = this.currentUserSubject.value;
+    if (!user) return 'Praticien';
+    return user.specialite || user.departement || 'Praticien';
   }
 
   private handleError(error: HttpErrorResponse): Observable<never> {

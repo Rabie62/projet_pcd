@@ -1,5 +1,5 @@
 """
-Medical AI Agent — CLI entry point.
+NeuroScan AI — CLI entry point.
 Supports running the API server, single-patient analysis, and batch processing.
 Adapted for BRISC 2025 dataset (2D T1-weighted MRI images).
 """
@@ -161,7 +161,7 @@ def run_batch(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Medical AI Agent — Brain Tumor MRI Analysis (BRISC 2025)",
+        description="NeuroScan AI — Brain Tumor MRI Analysis (BRISC 2025)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
