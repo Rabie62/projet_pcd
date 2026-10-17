@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { Patient, PatientCreateRequest } from '../models';
 
@@ -12,11 +12,19 @@ export class PatientService {
 
   constructor(private http: HttpClient) {}
 
-  getPatients(page = 1, limit = 20): Observable<Patient[]> {
+  getPatients(page = 1, limit = 100): Observable<Patient[]> {
     const params = new HttpParams()
       .set('page', page.toString())
+      .set('page_size', limit.toString())
       .set('limit', limit.toString());
-    return this.http.get<Patient[]>(this.apiUrl, { params, withCredentials: true });
+    return this.http.get<any>(this.apiUrl, { params, withCredentials: true }).pipe(
+      map(res => {
+        if (Array.isArray(res)) return res;
+        if (res && Array.isArray(res.items)) return res.items;
+        if (res && Array.isArray(res.content)) return res.content;
+        return [];
+      })
+    );
   }
 
   getPatient(id: number): Observable<Patient> {

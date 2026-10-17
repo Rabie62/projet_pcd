@@ -20,19 +20,19 @@ from agents.controller import ControllerAgent
 router = APIRouter()
 
 
-def _get_controller() -> ControllerAgent:
-    from api.routes.analysis import get_controller
-    return get_controller()
+def get_controller() -> ControllerAgent:
+    from api.routes.analysis import get_controller as ctrl
+    return ctrl()
 
 
-def _calculate_age(dob: Optional[datetime]) -> Optional[int]:
+def calculate_age(dob: Optional[datetime]) -> Optional[int]:
     if not dob:
         return None
     today = datetime.today()
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
-def _build_patient_response(patient) -> PatientResponse:
+def to_response(patient) -> PatientResponse:
     return PatientResponse(
         id=patient.id,
         nom=patient.nom,
@@ -67,7 +67,7 @@ def _build_patient_response(patient) -> PatientResponse:
 @router.post("/patients", response_model=PatientResponse, tags=["Patient History"], status_code=201)
 async def create_patient(request: PatientCreateRequest):
     """Register a new patient in the system."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     dob = None
     if request.date_naissance:
         try:
@@ -83,7 +83,7 @@ async def create_patient(request: PatientCreateRequest):
         )
     except (OSError, RuntimeError) as e:
         raise  # global handler will return 500
-    return _build_patient_response(patient)
+    return to_response(patient)
 
 
 @router.get("/patients", response_model=PaginatedResponse[PatientListItem], tags=["Patient History"])
@@ -92,7 +92,7 @@ async def list_patients(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
 ):
     """List registered patients with pagination."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     all_patients = ctrl.patient_store.list_patients()
     total = len(all_patients)
     start = (page - 1) * page_size
@@ -101,7 +101,7 @@ async def list_patients(
     items = [
         PatientListItem(
             id=p.id, nom=p.nom, prenom=p.prenom, genre=p.genre, tel=p.tel,
-            age=_calculate_age(p.date_naissance), poids=p.poids, taille=p.taille,
+            age=calculate_age(p.date_naissance), poids=p.poids, taille=p.taille,
             FC=p.FC, glycemie=p.glycemie, scan_count=len(p.scans),
             created_at=p.created_at.isoformat() if p.created_at else "",
         )
@@ -113,17 +113,17 @@ async def list_patients(
 @router.get("/patients/{id}", response_model=PatientResponse, tags=["Patient History"])
 async def get_patient(id: int):
     """Get a patient's full profile with scan history."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     patient = ctrl.patient_store.get_patient(id)
     if patient is None:
         raise NotFoundError(f"Patient {id} not found")
-    return _build_patient_response(patient)
+    return to_response(patient)
 
 
 @router.put("/patients/{id}", response_model=PatientResponse, tags=["Patient History"])
 async def update_patient(id: int, request: PatientUpdateRequest):
     """Update a patient's information."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     dob = None
     if request.date_naissance:
         try:
@@ -138,13 +138,13 @@ async def update_patient(id: int, request: PatientUpdateRequest):
     )
     if patient is None:
         raise NotFoundError(f"Patient {id} not found")
-    return _build_patient_response(patient)
+    return to_response(patient)
 
 
 @router.delete("/patients/{id}", tags=["Patient History"])
 async def delete_patient(id: int):
     """Delete a patient and all linked scan records."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     deleted = ctrl.patient_store.delete_patient(id)
     if not deleted:
         raise NotFoundError(f"Patient {id} not found")
@@ -152,9 +152,9 @@ async def delete_patient(id: int):
 
 
 @router.post("/patients/{id}/link/{session_id}", tags=["Patient History"])
-async def link_session_to_patient(id: int, session_id: str):
+async def link_scan(id: int, session_id: str):
     """Manually link an existing analysis session to a patient."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     patient = ctrl.patient_store.get_patient(id)
     if patient is None:
         raise NotFoundError(f"Patient {id} not found")
@@ -177,11 +177,11 @@ async def link_session_to_patient(id: int, session_id: str):
 
 
 @router.get("/patients/{id}/history", tags=["Patient History"])
-async def get_patient_history_text(id: int):
+async def get_history(id: int):
     """Get the formatted patient history text."""
-    ctrl = _get_controller()
+    ctrl = get_controller()
     patient = ctrl.patient_store.get_patient(id)
     if patient is None:
         raise NotFoundError(f"Patient {id} not found")
-    history_text = ctrl.patient_store.format_history_for_prompt(id)
+    history_text = ctrl.patient_store.format_history(id)
     return {"patient_id": id, "history_context": history_text}

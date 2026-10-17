@@ -47,7 +47,9 @@ export class AuthService {
       withCredentials: true
     }).pipe(
       tap(response => {
-        if (response) {
+          if (response.token) {
+            localStorage.setItem('auth_token', response.token);
+          }
           const user: AuthUser = {
             id: response.id,
             nom: response.nom,
@@ -58,9 +60,8 @@ export class AuthService {
             username: response.username,
           };
           this.currentUserSubject.next(user);
-        }
       }),
-      catchError(this.handleError)
+      catchError(err => this.handleError(err))
     );
   }
 
@@ -70,6 +71,9 @@ export class AuthService {
     }).pipe(
       tap(response => {
         if (response) {
+          if (response.token) {
+            localStorage.setItem('auth_token', response.token);
+          }
           const user: AuthUser = {
             id: response.id,
             nom: response.nom,
@@ -82,7 +86,7 @@ export class AuthService {
           this.currentUserSubject.next(user);
         }
       }),
-      catchError(this.handleError)
+      catchError(err => this.handleError(err))
     );
   }
 
@@ -94,8 +98,13 @@ export class AuthService {
   }
 
   private clearAuth(): void {
+    localStorage.removeItem('auth_token');
     this.currentUserSubject.next(null);
     this.router.navigate(['/login']);
+  }
+
+  getToken(): string | null {
+    return localStorage.getItem('auth_token');
   }
 
   isLoggedIn(): boolean {

@@ -89,7 +89,7 @@ def create_app() -> FastAPI:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_error_handler(request: Request, exc: Exception):
+    async def handle_error(request: Request, exc: Exception):
         """Catch-all for unexpected errors — log full traceback, return generic message."""
         logger.exception(f"Unhandled error at {request.method} {request.url.path}: {exc}")
         return JSONResponse(

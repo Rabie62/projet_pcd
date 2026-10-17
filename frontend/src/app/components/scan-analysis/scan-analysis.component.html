@@ -1,138 +1,433 @@
-<div class="grid-2" style="align-items: start; gap: 1.5rem;">
-  <!-- Input & Report Panel -->
-  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-    <div class="glass-panel">
-      <div class="card-header">
-        <h2 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
-          <lucide-icon [name]="BrainIcon" class="text-primary" [size]="20"></lucide-icon> Gestion Examens
-        </h2>
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     TOP CONTROLS & LANGGRAPH MULTI-AGENT BAR
+══════════════════════════════════════════════════════════════════════════════ -->
+<div class="glass-panel pacs-topbar">
+  <div class="topbar-inner">
+    
+    <!-- Input Patient & File Controls -->
+    <div class="patient-controls">
+      <div class="input-inline">
+        <label for="p-id" class="input-label">Patient *</label>
+
+        <select
+          id="p-id"
+          [(ngModel)]="patientId"
+          (ngModelChange)="onPatientChange($event)"
+          [disabled]="loading || patientsLoading"
+          class="pacs-input patient-select"
+        >
+          <option [ngValue]="null" [disabled]="patients.length > 0">
+            {{ patientsLoading ? 'Chargement des patients...' : (patients.length === 0 ? '-- Aucun patient enregistré --' : '-- Choisir un patient --') }}
+          </option>
+          <option *ngFor="let p of patients" [ngValue]="p.id">
+            {{ p.nom }} {{ p.prenom }} (ID: {{ p.id }})
+          </option>
+        </select>
       </div>
-      <div class="card-body">
-        <div class="form-group">
-          <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">ID Patient *</label>
-          <input
-            type="number"
-            [(ngModel)]="patientId"
-            [disabled]="loading"
-            placeholder="Entrez l'ID du patient..."
-          />
-        </div>
 
-        <div *ngIf="!file"
-             (dragover)="handleDragOver($event)"
-             (dragleave)="handleDragLeave($event)"
-             (drop)="handleDrop($event)"
-             (click)="fileInput.click()"
-             [style.border]="isDragging ? '2px dashed var(--primary)' : '2px dashed var(--glass-border)'"
-             style="border-radius: 12px; padding: 3rem 2rem; margin-top: 1rem; display: flex; flex-direction: column; align-items: center; gap: 1rem; cursor: pointer; transition: all 0.2s ease;"
-             [style.background]="isDragging ? 'rgba(56, 189, 248, 0.05)' : 'rgba(0,0,0,0.2)'">
-          <input #fileInput type="file" (change)="handleFileChange($event)" accept=".jpg,.jpeg,.png" style="display: none;" />
-          <div [style.color]="isDragging ? 'var(--primary)' : 'var(--text-muted)'" style="padding: 1rem; background: var(--bg-dark); border-radius: 50%;">
-            <lucide-icon [name]="UploadCloudIcon" [size]="32"></lucide-icon>
-          </div>
-          <div style="text-align: center;">
-            <p style="font-weight: 600; margin: 0 0 0.5rem 0;">Glisser & Déposer l'image (JPG, PNG)</p>
-            <p class="text-muted" style="font-size: 0.9rem; margin: 0;">ou cliquez pour parcourir les fichiers</p>
-          </div>
-        </div>
+      <!-- Hidden file input triggered by PACS dropzone -->
+      <input #fileInput type="file" (change)="handleFileChange($event)" accept=".jpg,.jpeg,.png" style="display: none;" />
 
-        <div *ngIf="file" style="margin-top: 1rem; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); padding: 1rem; border-radius: 12px; display: flex; align-items: center; justify-content: space-between;">
-          <div style="display: flex; align-items: center; gap: 1rem; overflow: hidden;">
-            <div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 8px;">
-              <lucide-icon [name]="FileImageIcon" class="text-primary" [size]="24"></lucide-icon>
-            </div>
-            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-              <p style="font-weight: 500; margin: 0 0 0.25rem 0;">{{ file.name }}</p>
-              <p class="text-muted" style="font-size: 0.8rem; margin: 0;">{{ getMathSize(file.size) }} MB</p>
-            </div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <button (click)="clearFile()" [disabled]="loading" style="background: transparent; padding: 0.5rem; border: 1px solid var(--glass-border);">
-              <lucide-icon [name]="XIcon" class="text-muted" [size]="18"></lucide-icon>
-            </button>
-            <button (click)="handleAnalyze()" [disabled]="loading">
-              <lucide-icon [name]="PlayIcon" [size]="18"></lucide-icon> {{ loading ? 'Analyse en cours...' : 'Analyser' }}
-            </button>
-          </div>
-        </div>
+      <!-- Selected file chip -->
+      <div *ngIf="file" class="selected-file-chip">
+        <lucide-icon [name]="FileImageIcon" class="text-cyan" [size]="16"></lucide-icon>
+        <span class="file-name-text">{{ file.name }}</span>
+        <span class="file-size-text">({{ getMathSize(file.size) }} MB)</span>
+        <button type="button" (click)="clearFile()" [disabled]="loading" class="btn-clear-file" title="Retirer l'image">
+          <lucide-icon [name]="XIcon" [size]="14"></lucide-icon>
+        </button>
+      </div>
 
-        <div *ngIf="error" style="color: var(--danger); margin-top: 1rem; padding: 1rem; background: rgba(239,68,68,0.1); border-radius: 8px;">
-          {{ error }}
-        </div>
+      <!-- Analyze action button -->
+      <button
+        type="button"
+        (click)="handleAnalyze()"
+        [disabled]="loading || !file || !patientId"
+        class="btn-analyze-glow"
+        title="Démarrer l'analyse de l'IRM sélectionnée"
+      >
+        <lucide-icon [name]="PlayIcon" [size]="16" *ngIf="!loading"></lucide-icon>
+        <div class="spinner-small" *ngIf="loading"></div>
+        <span>{{ loading ? 'Analyse 2D en cours...' : 'Démarrer l\'Analyse' }}</span>
+      </button>
+    </div>
+
+    <!-- LangGraph Multi-Agent Pipeline Status -->
+    <div class="pipeline-bar">
+      <span class="pipeline-label">Pipeline LangGraph :</span>
+      <div class="pipeline-nodes">
+        <span [class]="loading ? 'node-pill node-cyan pulse-cyan' : (result ? 'node-pill node-cyan' : 'node-pill')">
+          <span class="dot-indicator bg-cyan"></span> Vision 2D
+        </span>
+        <span class="node-arrow">➔</span>
+        <span [class]="result ? 'node-pill node-violet' : 'node-pill'">
+          <span class="dot-indicator bg-violet"></span> Diagnostic
+        </span>
+        <span class="node-arrow">➔</span>
+        <span [class]="result ? 'node-pill node-emerald' : 'node-pill'">
+          <span class="dot-indicator bg-emerald"></span> Safety
+        </span>
+        <span class="node-arrow">➔</span>
+        <span [class]="result ? 'node-pill node-amber' : 'node-pill'">
+          <span class="dot-indicator bg-amber"></span> Dialogue LLM
+        </span>
       </div>
     </div>
 
-    <div *ngIf="result" class="glass-panel">
-      <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <h2 style="margin: 0;">Rapport de Diagnostic - Patient {{ result.patient_id }}</h2>
-          <span [class]="'badge ' + (result.tumor_detected ? 'warning' : 'safe')">
-            {{ result.tumor_detected ? 'ANOMALIE DÉTECTÉE' : 'AUCUNE ANOMALIE' }}
-          </span>
+  </div>
+
+  <div *ngIf="error" class="error-banner">
+    <lucide-icon [name]="AlertTriangleIcon" [size]="16"></lucide-icon>
+    <span>{{ error }}</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     MAIN PACS WORKSTATION (2 COLUMNS)
+══════════════════════════════════════════════════════════════════════════════ -->
+<div class="pacs-workstation-layout">
+
+  <!-- LEFT COLUMN: 2D Radiology Canvas -->
+  <div class="glass-panel pacs-canvas-card">
+    
+    <!-- PACS Mode Tabs Header -->
+    <div class="pacs-card-header">
+      <div class="mode-tabs-group">
+        <button
+          type="button"
+          (click)="setMode('raw')"
+          [class.active]="activeMode === 'raw'"
+          class="pacs-mode-btn"
+        >
+          <lucide-icon [name]="EyeIcon" [size]="14"></lucide-icon>
+          <span>IRM Brute</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="setMode('overlay')"
+          [class.active]="activeMode === 'overlay'"
+          class="pacs-mode-btn"
+        >
+          <lucide-icon [name]="LayersIcon" [size]="14"></lucide-icon>
+          <span>Overlay Segmentation 2D</span>
+        </button>
+
+        <button
+          type="button"
+          (click)="setMode('gradcam')"
+          [class.active]="activeMode === 'gradcam'"
+          class="pacs-mode-btn"
+        >
+          <lucide-icon [name]="ActivityIcon" [size]="14"></lucide-icon>
+          <span>Grad-CAM XAI</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Central Radiology Screen -->
+    <div class="pacs-screen">
+
+      <!-- State 1: Loading Laser Scan Effect -->
+      <div *ngIf="loading" class="scan-overlay-loading">
+        <div class="laser-scanner-line"></div>
+        <div class="radar-scan-box">
+          <img *ngIf="previewUrl" [src]="previewUrl" alt="MRI Scan" class="radar-preview-img" />
+          <div class="radar-circle-sweep"></div>
+        </div>
+        <p class="scan-status-text">
+          <span class="dot-live-pulse"></span>
+          Inférence des agents en cours (Attention U-Net & EfficientNet)...
+        </p>
+      </div>
+
+      <!-- State 2: Result Views -->
+      <div *ngIf="!loading && result" class="screen-content-wrapper">
+
+        <!-- Overlay Mode -->
+        <img
+          *ngIf="activeMode === 'overlay'"
+          [src]="summaryImageUrl"
+          alt="Segmentation 2D"
+          class="radiology-img"
+          [style.opacity]="maskOpacity / 100"
+        />
+
+        <!-- Grad-CAM Mode -->
+        <img
+          *ngIf="activeMode === 'gradcam'"
+          [src]="gradcamImageUrl || summaryImageUrl"
+          alt="Grad-CAM Heatmap"
+          class="radiology-img"
+          [style.opacity]="maskOpacity / 100"
+        />
+
+        <!-- Raw Mode -->
+        <img
+          *ngIf="activeMode === 'raw'"
+          [src]="previewUrl"
+          alt="IRM Originale"
+          class="radiology-img"
+        />
+
+      </div>
+
+      <!-- State 3: Selected but not yet analyzed -->
+      <div *ngIf="!loading && !result && previewUrl" class="screen-content-wrapper">
+        <img [src]="previewUrl" alt="Aperçu IRM 2D" class="radiology-img" />
+      </div>
+
+      <!-- State 4: Empty Dropzone -->
+      <div
+        *ngIf="!loading && !result && !previewUrl"
+        (dragover)="handleDragOver($event)"
+        (dragleave)="handleDragLeave($event)"
+        (drop)="handleDrop($event)"
+        (click)="triggerFileInput()"
+        class="pacs-empty-dropzone"
+        [class.dragging]="isDragging"
+      >
+        <div class="dropzone-icon-box">
+          <lucide-icon [name]="UploadCloudIcon" [size]="38"></lucide-icon>
+        </div>
+        <p class="dropzone-title">Glisser-déposer votre coupe axiale IRM (JPG, PNG)</p>
+        <p class="dropzone-sub">Ou cliquez ici pour parcourir les fichiers de votre ordinateur</p>
+        <span class="dropzone-dataset-tag">
+          Imagerie IRM Cérébrale 2D
+        </span>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- RIGHT COLUMN: Multi-Agent Clinical Intelligence & Safety -->
+  <div class="clinical-intel-column">
+
+    <!-- When Analysis Completed -->
+    <ng-container *ngIf="result">
+
+      <!-- Classification Hero Card -->
+      <div class="glass-panel intel-card intel-card-glow">
+        <div class="hero-card-header">
+          <div class="classification-titles">
+            <div class="classification-badges">
+              <span class="badge-category">Classification Histologique</span>
+              <span [class]="result.tumor_detected ? 'badge-detected' : 'badge-healthy'">
+                {{ result.tumor_detected ? 'ANOMALIE DÉTECTÉE' : 'AUCUNE ANOMALIE' }}
+              </span>
+            </div>
+            
+            <h2 class="diagnosis-main-title">
+              {{ result.classification || 'Pas de Tumeur Détectée' }}
+            </h2>
+          </div>
+
+          <!-- Circular Glowing Confidence Gauge -->
+          <div class="confidence-gauge-box">
+            <svg class="gauge-svg" viewBox="0 0 36 36">
+              <path class="gauge-bg" stroke-width="3.5" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+              <path
+                class="gauge-fill"
+                [attr.stroke-dasharray]="((result.classification_confidence || 0) * 100).toFixed(1) + ', 100'"
+                stroke-width="3.5"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+              />
+            </svg>
+            <div class="gauge-center-text">
+              <span class="gauge-percent">
+                {{ ((result.classification_confidence || 0) * 100) | number:'1.1-1' }}%
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4-Class Probability Breakdown -->
+        <div class="prob-breakdown-container">
+          <div class="prob-item">
+            <div class="prob-info">
+              <span class="prob-name">Gliome</span>
+              <span class="prob-val text-cyan font-mono">{{ getProbability('glioma') }}%</span>
+            </div>
+            <div class="prob-track">
+              <div class="prob-bar bar-cyan" [style.width.%]="getProbability('glioma')"></div>
+            </div>
+          </div>
+
+          <div class="prob-item">
+            <div class="prob-info">
+              <span class="prob-name">Méningiome</span>
+              <span class="prob-val font-mono">{{ getProbability('meningioma') }}%</span>
+            </div>
+            <div class="prob-track">
+              <div class="prob-bar bar-amber" [style.width.%]="getProbability('meningioma')"></div>
+            </div>
+          </div>
+
+          <div class="prob-item">
+            <div class="prob-info">
+              <span class="prob-name">Adénome Pituitaire</span>
+              <span class="prob-val font-mono">{{ getProbability('pituitary') }}%</span>
+            </div>
+            <div class="prob-track">
+              <div class="prob-bar bar-slate" [style.width.%]="getProbability('pituitary')"></div>
+            </div>
+          </div>
+
+          <div class="prob-item">
+            <div class="prob-info">
+              <span class="prob-name">Pas de Tumeur</span>
+              <span class="prob-val font-mono">{{ getProbability('notumor') }}%</span>
+            </div>
+            <div class="prob-track">
+              <div class="prob-bar bar-emerald" [style.width.%]="getProbability('notumor')"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2D Morphometrics KPI Badges (BRISC) -->
+        <div *ngIf="result.tumor_features" class="kpi-cards-grid">
+          <div class="kpi-card border-cyan">
+            <span class="kpi-title">Surface 2D</span>
+            <span class="kpi-value text-cyan font-mono">
+              {{ result.tumor_features.tumor_area_mm2 | number:'1.1-1' }} mm²
+            </span>
+          </div>
+          <div class="kpi-card border-violet">
+            <span class="kpi-title">Diamètre Max</span>
+            <span class="kpi-value text-violet font-mono">
+              {{ result.tumor_features.max_diameter_mm | number:'1.1-1' }} mm
+            </span>
+          </div>
+          <div class="kpi-card border-rose">
+            <span class="kpi-title">Localisation</span>
+            <span class="kpi-value text-rose kpi-loc-text">
+              {{ result.tumor_features.location_description || 'Non précisé' }}
+            </span>
+          </div>
         </div>
       </div>
-      <div class="card-body" style="display: flex; flex-direction: column; gap: 1.5rem;">
-        <div *ngIf="result.tumor_detected" style="padding: 1rem; background: rgba(56, 189, 248, 0.1); border-radius: 8px; border: 1px solid var(--primary);">
-          <h3 class="text-primary" style="margin: 0;">Classification: {{ result.classification }}</h3>
-          <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem;">
-            Confiance: {{ (result.classification_confidence * 100) | number:'1.1-1' }}% | Grade WHO: {{ result.who_grade }}
-          </div>
-          <div *ngIf="result.tumor_features" style="margin-top: 1rem; display: flex; gap: 1rem;">
-            <div><strong>Surface:</strong> {{ result.tumor_features.tumor_area_mm2 | number:'1.1-1' }} mm²</div>
-            <div><strong>Diamètre Max:</strong> {{ result.tumor_features.max_diameter_mm | number:'1.1-1' }} mm</div>
-          </div>
-        </div>
 
+      <!-- Diagnostic Agent Clinical Report -->
+      <div class="glass-panel intel-card flex-1-card">
         <div>
-          <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">Résumé Clinique</h3>
-          <p style="line-height: 1.6; color: var(--text-main); white-space: pre-wrap;">{{ result.clinical_summary }}</p>
+          <div class="diagnostic-card-header">
+            <div class="diagnostic-title-group">
+              <span class="diagnostic-pulse-dot"></span>
+              <h3 class="diagnostic-card-title">Synthèse Diagnostic Agent (LLM + RAG)</h3>
+            </div>
+            <span class="badge-rag font-mono">S-PubMedBERT</span>
+          </div>
+
+          <div class="summary-text-box">
+            {{ result.clinical_summary }}
+          </div>
         </div>
 
-        <div style="margin-top: 0.5rem; display: flex; justify-content: flex-end; border-top: 1px solid var(--glass-border); padding-top: 1.25rem;">
+        <!-- EU AI Act Article 14 Gatekeeper -->
+        <div class="gatekeeper-card"
+             [class.gatekeeper-approved]="reviewStatus === 'approved'"
+             [class.gatekeeper-rejected]="reviewStatus === 'rejected'"
+             [class.gatekeeper-pending]="reviewStatus === 'pending_review'">
+          
+          <div class="gatekeeper-header">
+            <span class="gatekeeper-title">
+              <lucide-icon [name]="ShieldCheckIcon" [size]="16"></lucide-icon>
+              <span>EU AI Act Art. 14 : Contrôle Humain</span>
+            </span>
+            
+            <span class="gatekeeper-badge"
+                  [class.badge-app]="reviewStatus === 'approved'"
+                  [class.badge-pen]="reviewStatus === 'pending_review'"
+                  [class.badge-rej]="reviewStatus === 'rejected'">
+              {{ reviewStatus === 'approved' ? 'VALIDÉ' : (reviewStatus === 'rejected' ? 'REJETÉ' : 'EN ATTENTE') }}
+            </span>
+          </div>
+
+          <p *ngIf="reviewMessage" class="review-feedback-msg">
+            {{ reviewMessage }}
+          </p>
+
+          <!-- Review Action Buttons -->
+          <div *ngIf="reviewStatus === 'pending_review'" class="gatekeeper-buttons-grid">
+            <button
+              type="button"
+              (click)="approveReport()"
+              [disabled]="reviewLoading"
+              class="btn-approve-action"
+            >
+              <lucide-icon [name]="CheckIcon" [size]="14"></lucide-icon>
+              <span>Approuver Rapport</span>
+            </button>
+
+            <button
+              type="button"
+              (click)="openRejectModal()"
+              [disabled]="reviewLoading"
+              class="btn-reject-action"
+            >
+              <lucide-icon [name]="XIcon" [size]="14"></lucide-icon>
+              <span>Seconde Lecture</span>
+            </button>
+          </div>
+
+          <!-- Export PDF -->
           <button
+            type="button"
             (click)="exportPdf()"
-            style="padding: 0.6rem 1.25rem; font-size: 0.9rem; background: var(--primary); color: white; border: none; border-radius: 8px; display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-weight: 600;"
+            class="btn-export-pdf-action"
           >
-            <lucide-icon [name]="DownloadIcon" [size]="16"></lucide-icon> Exporter le Rapport en PDF
+            <lucide-icon [name]="DownloadIcon" [size]="14"></lucide-icon>
+            <span>Exporter le Rapport Médical en PDF</span>
           </button>
         </div>
+
       </div>
-    </div>
+
+    </ng-container>
+
+    <!-- Empty Box Initially When No Analysis Yet -->
+    <div *ngIf="!result" class="glass-panel intel-empty-card"></div>
+
   </div>
 
-  <!-- Visual Overlay Panel (Sticky and Top-Aligned) -->
-  <div class="glass-panel" style="position: sticky; top: 0; align-self: start; display: flex; flex-direction: column;">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-      <h2 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
-        <lucide-icon [name]="LayersIcon" class="text-primary" [size]="20"></lucide-icon> Analyse Visuelle
-      </h2>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════════
+     REJECT MODAL (SECONDE LECTURE)
+══════════════════════════════════════════════════════════════════════════════ -->
+<div *ngIf="showRejectModal" class="modal-overlay">
+  <div class="glass-panel modal-dialog-box">
+    <div class="modal-dialog-header">
+      <h3 class="modal-dialog-title">
+        <lucide-icon [name]="AlertTriangleIcon" [size]="18"></lucide-icon>
+        <span>Demande de Seconde Lecture</span>
+      </h3>
+      <button (click)="closeRejectModal()" class="modal-btn-close">
+        <lucide-icon [name]="XIcon" [size]="16"></lucide-icon>
+      </button>
     </div>
-    
-    <div class="card-body" style="display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 1.5rem; gap: 1rem;">
-      
-      <div *ngIf="loading" class="text-muted" style="display: flex; flex-direction: column; align-items: center; gap: 1rem; padding: 3rem 0;">
-        <div class="spinner"><lucide-icon [name]="ActivityIcon" [size]="48"></lucide-icon></div>
-        Analyse 2D en cours...
-      </div>
 
-      <div *ngIf="!loading && result" style="width: 100%; display: flex; align-items: center; justify-content: center;">
-        <img [src]="summaryImageUrl"
-             alt="MRI Analysis"
-             style="width: 100%; height: auto; max-height: 75vh; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); object-fit: contain;"
-        />
-      </div>
+    <p class="modal-dialog-desc">
+      Veuillez spécifier le motif du rejet ou de l'incertitude clinique pour archivage dans la piste d'audit EU AI Act :
+    </p>
 
-      <img *ngIf="!loading && !result && previewUrl"
-           [src]="previewUrl"
-           alt="Preview"
-           style="max-width: 100%; max-height: 500px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); opacity: 0.85; object-fit: contain;"
-      />
+    <textarea
+      [(ngModel)]="rejectionReason"
+      rows="3"
+      placeholder="Ex: Discordance entre la segmentation et la carte Grad-CAM..."
+      class="pacs-input modal-textarea"
+    ></textarea>
 
-      <div *ngIf="!loading && !result && !previewUrl" class="text-muted" style="padding: 3rem 0;">
-        En attente d'une image (JPG, PNG)
-      </div>
-
+    <div class="modal-dialog-actions">
+      <button (click)="closeRejectModal()" class="btn-cancel">Annuler</button>
+      <button
+        (click)="submitReject()"
+        [disabled]="!rejectionReason.trim() || reviewLoading"
+        class="btn-reject-action"
+      >
+        <span>Confirmer le Rejet</span>
+      </button>
     </div>
   </div>
-
 </div>

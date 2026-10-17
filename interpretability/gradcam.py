@@ -14,24 +14,26 @@ from loguru import logger
 
 class GradCAM:
     """
-    Grad-CAM for ResNet-based TumorClassifier.
-    Hooks into the final convolutional layer to extract feature maps and gradients.
+    Grad-CAM for EfficientNet-V2-S TumorClassifier.
+    Hooks into the final convolutional feature layer to extract feature maps and gradients.
     """
 
     def __init__(self, model: nn.Module, target_layer: Optional[nn.Module] = None):
         """
         Args:
             model: The TumorClassifier model instance
-            target_layer: The convolutional layer to inspect. Defaults to model.model.layer4[-1].
+            target_layer: The convolutional layer to inspect. Defaults to model.model.features[-1].
         """
         self.model = model
         self.model.eval()
 
         # Find target layer if not provided
         if target_layer is None:
-            if hasattr(model, "model") and hasattr(model.model, "layer4"):
-                # ResNet layer4 last block
-                self.target_layer = model.model.layer4[-1]
+            if hasattr(model, "model") and hasattr(model.model, "features"):
+                # EfficientNet features last block
+                self.target_layer = model.model.features[-1]
+            elif hasattr(model, "features"):
+                self.target_layer = model.features[-1]
             else:
                 raise ValueError("Target layer could not be determined automatically.")
         else:
@@ -39,10 +41,10 @@ class GradCAM:
 
         self.activations: Optional[torch.Tensor] = None
         self.gradients: Optional[torch.Tensor] = None
-        self._handlers = []
-        self._register_hooks()
+        self.hooks = []
+        self.register_hooks()
 
-    def _register_hooks(self) -> None:
+    def register_hooks(self) -> None:
         def forward_hook(module, input, output):
             self.activations = output.detach()
 
@@ -51,12 +53,12 @@ class GradCAM:
 
         h1 = self.target_layer.register_forward_hook(forward_hook)
         h2 = self.target_layer.register_full_backward_hook(backward_hook)
-        self._handlers = [h1, h2]
+        self.hooks = [h1, h2]
 
     def remove_hooks(self) -> None:
-        for h in self._handlers:
+        for h in self.hooks:
             h.remove()
-        self._handlers.clear()
+        self.hooks.clear()
 
     def generate_cam(
         self,
@@ -99,7 +101,7 @@ class GradCAM:
         cam = F.relu(cam)  # Only features with positive influence
 
         # Resize CAM to match input image size (H, W)
-        _, _, H, W = input_tensor.shape
+        batch_size, channels, H, W = input_tensor.shape
         cam = F.interpolate(cam, size=(H, W), mode="bilinear", align_corners=False)
         cam = cam.squeeze().cpu().numpy()
 

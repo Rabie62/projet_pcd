@@ -24,9 +24,9 @@ def test_gradcam_generation():
 
     # Verify GradCAM object structure and hook cleanup
     assert hasattr(cam_gen, "generate_cam")
-    assert len(cam_gen._handlers) == 2
+    assert len(cam_gen.hooks) == 2
     cam_gen.remove_hooks()
-    assert len(cam_gen._handlers) == 0
+    assert len(cam_gen.hooks) == 0
 
 
 def test_segmentation_postprocessing():
@@ -50,7 +50,7 @@ def test_visualizer_gradcam_overlay():
     dummy_mri = np.random.rand(3, 128, 128)
     dummy_cam = np.random.rand(128, 128)
 
-    gradcam_bytes = viz.generate_gradcam_overlay(dummy_mri, dummy_cam)
+    gradcam_bytes = viz.gradcam_overlay(dummy_mri, dummy_cam)
     assert isinstance(gradcam_bytes, bytes)
     assert len(gradcam_bytes) > 100
     assert gradcam_bytes.startswith(b"\x89PNG\r\n\x1a\n")

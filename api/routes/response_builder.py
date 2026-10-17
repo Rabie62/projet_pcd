@@ -14,7 +14,7 @@ from api.schemas import (
 )
 
 
-def build_analysis_response(
+def build_response(
     session: dict,
     controller,
 ) -> AnalysisResponse:

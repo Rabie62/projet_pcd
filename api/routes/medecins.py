@@ -17,18 +17,18 @@ from agents.controller import ControllerAgent
 
 router = APIRouter()
 
-_medecin_store = None
+store = None
 
 
-def _get_medecin_store():
-    global _medecin_store
-    if _medecin_store is None:
+def get_store():
+    global store
+    if store is None:
         from data.medecin_store import MedecinConsultationStore
-        _medecin_store = MedecinConsultationStore()
-    return _medecin_store
+        store = MedecinConsultationStore()
+    return store
 
 
-def _build_medecin_response(medecin) -> MedecinResponse:
+def to_response(medecin) -> MedecinResponse:
     return MedecinResponse(
         id=medecin.id, nom=medecin.nom, prenom=medecin.prenom,
         specialite=medecin.specialite, tel=medecin.tel, email=medecin.email,
@@ -42,16 +42,16 @@ def _build_medecin_response(medecin) -> MedecinResponse:
 @router.post("/medecins", response_model=MedecinResponse, tags=["Médecins"], status_code=201)
 async def create_medecin(request: MedecinCreateRequest):
     """Register a new doctor in the system."""
-    store = _get_medecin_store()
+    st = get_store()
     try:
-        medecin = store.create_medecin(
+        medecin = st.create_medecin(
             nom=request.nom, prenom=request.prenom, specialite=request.specialite,
             tel=request.tel, email=request.email, departement=request.departement,
             username=request.username, password=request.password,
         )
     except (OSError, RuntimeError) as e:
         raise  # global handler
-    return _build_medecin_response(medecin)
+    return to_response(medecin)
 
 
 @router.get("/medecins", response_model=PaginatedResponse[MedecinListItem], tags=["Médecins"])
@@ -60,8 +60,8 @@ async def list_medecins(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
 ):
     """List all registered doctors with pagination."""
-    store = _get_medecin_store()
-    all_medecins = store.list_medecins()
+    st = get_store()
+    all_medecins = st.list_medecins()
     total = len(all_medecins)
     start = (page - 1) * page_size
     end = start + page_size
@@ -81,32 +81,32 @@ async def list_medecins(
 @router.get("/medecins/{id}", response_model=MedecinResponse, tags=["Médecins"])
 async def get_medecin(id: int):
     """Get a doctor's full profile with consultation history."""
-    store = _get_medecin_store()
-    medecin = store.get_medecin(id)
+    st = get_store()
+    medecin = st.get_medecin(id)
     if medecin is None:
         raise NotFoundError(f"Médecin {id} not found")
-    return _build_medecin_response(medecin)
+    return to_response(medecin)
 
 
 @router.put("/medecins/{id}", response_model=MedecinResponse, tags=["Médecins"])
 async def update_medecin(id: int, request: MedecinUpdateRequest):
     """Update a doctor's information."""
-    store = _get_medecin_store()
-    medecin = store.update_medecin(
+    st = get_store()
+    medecin = st.update_medecin(
         id=id, nom=request.nom, prenom=request.prenom, specialite=request.specialite,
         tel=request.tel, email=request.email, departement=request.departement,
         username=request.username, password=request.password,
     )
     if medecin is None:
         raise NotFoundError(f"Médecin {id} not found")
-    return _build_medecin_response(medecin)
+    return to_response(medecin)
 
 
 @router.delete("/medecins/{id}", tags=["Médecins"])
 async def delete_medecin(id: int):
     """Delete a doctor and all linked consultation records."""
-    store = _get_medecin_store()
-    deleted = store.delete_medecin(id)
+    st = get_store()
+    deleted = st.delete_medecin(id)
     if not deleted:
         raise NotFoundError(f"Médecin {id} not found")
     return {"id": id, "message": "Médecin deleted successfully"}

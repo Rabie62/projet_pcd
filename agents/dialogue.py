@@ -1,22 +1,21 @@
 """
-Dialogue Agent — Gemma 3 1B-IT natural language interface.
+Dialogue Agent — Ollama natural language interface.
 Communicates diagnostic results to doctors and answers medical queries.
 """
 
 from __future__ import annotations
+import json
 import re
 from typing import Optional
-import torch
+import httpx
 from loguru import logger
-from threading import Thread
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 from config.settings import Settings, get_settings
 from agents.diagnostic import DiagnosticReport
 
 
 class DialogueAgent:
     """
-    Dialogue Agent using Gemma 3 1B-IT.
+    Dialogue Agent using Ollama.
 
     Provides:
     - Natural language explanations of diagnostic findings
@@ -25,16 +24,15 @@ class DialogueAgent:
     - Evidence-based responses grounded in the diagnostic report
     """
 
-    # ── System prompt (concise, directive, optimized for 1B) ──
+    # ── System prompt (directive, clinical, comprehensive) ──
     SYSTEM_PROMPT = (
-        "Assistant medical IA en neuroradiologie. Repondez en francais.\n"
+        "Assistant medical IA en neuroradiologie. Repondez en francais de maniere complete et detaillee.\n"
         "Regles :\n"
-        "- Basez vos reponses uniquement sur le rapport de diagnostic fourni\n"
+        "- Basez vos reponses sur le rapport de diagnostic fourni et les connaissances medicales\n"
         "- Citez les mesures, la classification et le grade OMS\n"
         "- Mentionnez la confiance IA pour chaque resultat\n"
-        "- Proposez des protocoles medicaux concretes (chirurgie, suivi, bilan)\n"
-        "- Si confiance < 85%, suggerez un diagnostic differentiel\n"
-        "- Repondez de maniere concise (3-6 phrases max)\n"
+        "- Proposez des protocoles medicaux concrets (chirurgie, suivi, bilan, diagnostic differentiel)\n"
+        "- Fournissez des explications approfondies et exhaustives\n"
         "- Terminez par : 'Confirmation clinique par un medecin requise.'"
     )
 
@@ -72,10 +70,14 @@ class DialogueAgent:
     def __init__(self, settings: Optional[Settings] = None, rag_system=None):
         self.settings = settings or get_settings()
         self.rag_system = rag_system
-        self.model = None
-        self.tokenizer = None
+        self.base_url = self.settings.model.ollama_base_url.rstrip("/")
+        self.model_name = self.settings.model.ollama_model
         self.model_loaded = False
         self.current_report: Optional[DiagnosticReport] = None
+
+        # Compatibility placeholders
+        self.model = None
+        self.tokenizer = None
         
         # Per-session multi-turn memory: session_id -> list of {"user": str, "assistant": str}
         self.session_memories: dict[str, list[dict[str, str]]] = {}
@@ -83,47 +85,29 @@ class DialogueAgent:
         self.session_reports: dict[str, DiagnosticReport] = {}
 
     def load_model(self) -> None:
-        """Load the Gemma 3 1B-IT model"""
-
-        model_id = self.settings.model.llm_model_id
-        logger.info(f"Loading {model_id}...")
-
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            model_id, 
-            trust_remote_code=True,
-            use_fast=True,
-            token=self.settings.model.hf_token
-        )
-
-        if torch.cuda.is_available():
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                trust_remote_code=True,
-                attn_implementation="eager",
-                token=self.settings.model.hf_token,
-            )
-            logger.info(f"Loaded {model_id} on GPU (float16) with eager attention (stability mode)")
-        else:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                torch_dtype=torch.float32,
-                device_map="cpu",
-                trust_remote_code=True,
-                low_cpu_mem_usage=True,
-                token=self.settings.model.hf_token,
-            )
-            logger.warning(
-                f"Loaded {model_id} on CPU. "
-                "Expect slow inference."
-            )
-
-        if self.tokenizer.pad_token is None:
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
-        self.model_loaded = True
-        logger.info("Dialogue Agent model loaded")
+        """Verify Ollama connection and model availability."""
+        logger.info(f"Connecting to Ollama at {self.base_url} (model: {self.model_name})...")
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                res = client.get(f"{self.base_url}/api/tags")
+                if res.status_code == 200:
+                    models = [m.get("name", "") for m in res.json().get("models", [])]
+                    # Check exact or prefix match (e.g. 'llama3.2:3b' or 'llama3.2:3b-instruct')
+                    found = any(self.model_name in m or m.startswith(self.model_name) for m in models)
+                    if found:
+                        logger.info(f"Ollama model '{self.model_name}' is ready.")
+                    else:
+                        logger.warning(
+                            f"Model '{self.model_name}' not found in local Ollama list ({models}). "
+                            f"Ollama will attempt to pull it or use default."
+                        )
+                    self.model_loaded = True
+                else:
+                    logger.warning(f"Ollama responded with HTTP {res.status_code}.")
+                    self.model_loaded = True
+        except Exception as e:
+            logger.warning(f"Unable to reach Ollama at {self.base_url}: {e}. Inference will retry on demand.")
+            self.model_loaded = False
 
     def set_report_context(self, report: DiagnosticReport, session_id: Optional[str] = None) -> None:
         """Set the diagnostic report as conversation context for a session."""
@@ -192,17 +176,14 @@ class DialogueAgent:
                 parts.append(
                     f"Recommandations : {'; '.join(report.recommendations)}"
                 )
-            # Include a short excerpt of the clinical summary (first 300 chars)
+            # Include full clinical summary
             if report.clinical_summary:
-                excerpt = report.clinical_summary[:300]
-                if len(report.clinical_summary) > 300:
-                    excerpt += "..."
-                parts.append(f"Resume clinique : {excerpt}")
+                parts.append(f"Resume clinique : {report.clinical_summary}")
         else:
             parts.append("Tumeur detectee : Non")
             parts.append("Examen normal.")
 
-        # ── RAG Context (compact) ──
+        # ── RAG Context (full) ──
         if (self.rag_system and self.rag_system.available
                 and report.tumor_detected and report.classification):
             classification = report.classification
@@ -216,25 +197,21 @@ class DialogueAgent:
 
             seen = set()
             rag_parts = []
-            rag_scores = []
             for q in queries:
-                for chunk in self.rag_system.retrieve(q, top_k=2, min_score=0.3):
+                for chunk in self.rag_system.retrieve(q, top_k=4, min_score=0.25):
                     key = chunk.text[:80]
                     if key not in seen:
                         seen.add(key)
                         rag_parts.append(chunk.text)
-                        rag_scores.append(getattr(chunk, "score"))
 
             if rag_parts:
-                rag_text = "\n---\n".join(rag_parts[:3])
-                if len(rag_text) > 600:
-                    rag_text = rag_text[:600] + "..."
+                rag_text = "\n---\n".join(rag_parts)
                 parts.append(f"\nConnaissances cliniques :\n{rag_text}")
 
         return "\n".join(parts)
 
     def build_messages(self, user_query: str, session_id: Optional[str] = None) -> list[dict[str, str]]:
-        """Build the chat messages list for the model's chat template with session memory."""
+        """Build the chat messages list for Ollama's chat endpoint with session memory."""
         context = self.build_context_prompt(session_id)
 
         # ── System message: prompt + few-shot examples ──
@@ -248,17 +225,11 @@ class DialogueAgent:
             f"{examples_text}"
         )
 
-        messages = [{"role": "system", "content": system_content}]
-
-        # ── Inject report context as a structured user/assistant pair ──
-        messages.append({
-            "role": "user",
-            "content": "Voici le rapport de diagnostic du patient. Memorisez-le.",
-        })
-        messages.append({
-            "role": "assistant",
-            "content": f"Rapport enregistre :\n{context}",
-        })
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": "Voici le rapport de diagnostic du patient. Memorisez-le."},
+            {"role": "assistant", "content": f"Rapport enregistre :\n{context}"},
+        ]
 
         # ── Multi-turn conversation history for this session (last 4 exchanges) ──
         history = self.get_session_history(session_id)
@@ -270,7 +241,39 @@ class DialogueAgent:
         messages.append({"role": "user", "content": user_query})
         return messages
 
-    @torch.no_grad()
+    def generate_chat(
+        self,
+        messages: list[dict[str, str]],
+        temperature: Optional[float] = None,
+    ) -> str:
+        """
+        Send a chat completion request to Ollama.
+
+        Args:
+            messages: list of {"role": str, "content": str}
+            temperature: sampling temperature
+
+        Returns:
+            Generated response string
+        """
+        if not self.model_loaded:
+            self.load_model()
+
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature if temperature is not None else self.settings.model.llm_temperature,
+            },
+        }
+
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(f"{self.base_url}/api/chat", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("message", {}).get("content", "").strip()
+
     def chat(self, user_query: str, session_id: Optional[str] = None) -> str:
         """
         Process a doctor's query and generate a response with session memory.
@@ -282,45 +285,16 @@ class DialogueAgent:
         Returns:
             Natural language response grounded in the diagnostic report and chat history
         """
-        if not self.model_loaded:
-            self.load_model()
-
         messages = self.build_messages(user_query, session_id=session_id)
-
-        inputs = self.tokenizer.apply_chat_template(
-            messages,
-            return_tensors="pt",
-            add_generation_prompt=True,
-            return_dict=True,
-        )
-
-        if torch.cuda.is_available() and hasattr(self.model, "device"):
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-
-        outputs = self.model.generate(
-            **inputs,
-            max_new_tokens=768,
-            temperature=self.settings.model.llm_temperature,
-            do_sample=True,
-            top_p=0.9,
-            repetition_penalty=1.15,
-            pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
-        )
-
-        response = self.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1]:],
-            skip_special_tokens=True,
-        ).strip()
+        response = self.generate_chat(messages)
 
         # Post-processing: strip leaked metadata lines
         response = re.sub(r'\[RAG Metrics:.*?\]', '', response).strip()
         response = re.sub(r'Requete RAG:.*?\n', '', response).strip()
 
         self.add_session_exchange(session_id, user_query, response)
-
         return response
 
-    @torch.no_grad()
     def chat_stream(self, user_query: str, session_id: Optional[str] = None):
         """
         Process a doctor's query and generate a streamed response with session memory.
@@ -330,49 +304,41 @@ class DialogueAgent:
             session_id: optional unique ID of the analysis session
 
         Yields:
-            Text chunks as they are generated by the model
+            Text chunks as they are generated by Ollama
         """
         if not self.model_loaded:
             self.load_model()
 
         messages = self.build_messages(user_query, session_id=session_id)
 
-        inputs = self.tokenizer.apply_chat_template(
-            messages,
-            return_tensors="pt",
-            add_generation_prompt=True,
-            return_dict=True,
-        )
-
-        if torch.cuda.is_available() and hasattr(self.model, "device"):
-            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-
-        streamer = TextIteratorStreamer(
-            self.tokenizer,
-            skip_prompt=True,
-            skip_special_tokens=True
-        )
-
-        generation_kwargs = dict(
-            **inputs,
-            streamer=streamer,
-            max_new_tokens=768,
-            temperature=self.settings.model.llm_temperature,
-            do_sample=True,
-            top_p=0.9,
-            repetition_penalty=1.15,
-            pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
-        )
-
-        thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
-        thread.start()
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": self.settings.model.llm_temperature,
+            },
+        }
 
         full_response = ""
-        for new_text in streamer:
-            full_response += new_text
-            yield new_text
+        with httpx.Client(timeout=120.0) as client:
+            with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:
+                response.raise_for_status()
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        chunk_data = json.loads(line)
+                        token = chunk_data.get("message", {}).get("content", "")
+                        if token:
+                            full_response += token
+                            yield token
+                        if chunk_data.get("done"):
+                            break
+                    except Exception as err:
+                        logger.debug(f"Failed to parse streaming line: {err}")
 
-        # Record the conversation history into session memory after stream completes
+        # Record conversation history into session memory
         cleaned = re.sub(r'\[RAG Metrics:.*?\]', '', full_response).strip()
         cleaned = re.sub(r'Requete RAG:.*?\n', '', cleaned).strip()
         self.add_session_exchange(session_id, user_query, cleaned)
@@ -400,7 +366,7 @@ class DialogueAgent:
             "anatomique et les structures voisines potentiellement atteintes."
         )
 
-    def get_confidence_explanation(self) -> str:
+    def explain_confidence(self) -> str:
         """Explain the AI confidence scores and their clinical meaning."""
         return self.chat(
             "Expliquez le score de confiance de la classification tumorale. "

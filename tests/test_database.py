@@ -13,8 +13,8 @@ class TestSharedDatabase:
         """Calling get_engine() twice should return the same engine."""
         from data import db
         # Reset the module-level state
-        db._engine = None
-        db._session_factory = None
+        db.engine = None
+        db.session_factory = None
 
         with patch('data.db.get_settings') as mock_settings:
             mock_settings.return_value.db.url = 'mysql+pymysql://root:@localhost:3306/medical_ai'
@@ -35,8 +35,8 @@ class TestSharedDatabase:
     def test_get_session_factory_returns_same_instance(self):
         """Calling get_session_factory() twice should return the same factory."""
         from data import db
-        db._engine = None
-        db._session_factory = None
+        db.engine = None
+        db.session_factory = None
 
         with patch('data.db.get_settings') as mock_settings:
             mock_settings.return_value.db.url = 'mysql+pymysql://root:@localhost:3306/medical_ai'
@@ -60,7 +60,7 @@ class TestSharedDatabase:
     def test_empty_url_raises_runtime_error(self):
         """An empty DB URL should raise RuntimeError with a clear message."""
         from data import db
-        db._engine = None
+        db.engine = None
 
         with patch('data.db.get_settings') as mock_settings:
             mock_settings.return_value.db.url = None
@@ -71,8 +71,8 @@ class TestSharedDatabase:
     def test_init_database_creates_tables(self):
         """init_database() should call create_all on the shared engine."""
         from data import db
-        db._engine = None
-        db._session_factory = None
+        db.engine = None
+        db.session_factory = None
 
         mock_base = MagicMock()
 
@@ -86,16 +86,16 @@ class TestSharedDatabase:
                 mock_create.return_value = MagicMock()
 
                 with patch.dict('sys.modules', {'data.database': MagicMock(Base=mock_base)}):
-                    with patch.object(db, '_engine', None, create=True):
-                        db._engine = None
+                    with patch.object(db, 'engine', None, create=True):
+                        db.engine = None
                         db.init_database()
                         mock_base.metadata.create_all.assert_called_once()
 
     def test_connection_error_propagates(self):
         """A connection failure in create_all should raise RuntimeError with context."""
         from data import db
-        db._engine = None
-        db._session_factory = None
+        db.engine = None
+        db.session_factory = None
 
         mock_base = MagicMock()
         mock_base.metadata.create_all.side_effect = Exception("Connection refused")
@@ -113,7 +113,7 @@ class TestSharedDatabase:
                 mock_create.return_value = MagicMock()
 
                 with patch.dict('sys.modules', {'data.database': mock_db_module}):
-                    db._engine = None
-                    db._session_factory = None
+                    db.engine = None
+                    db.session_factory = None
                     with pytest.raises(RuntimeError, match="Failed to connect to MySQL"):
                         db.init_database()

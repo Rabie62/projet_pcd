@@ -1,46 +1,49 @@
 """
-2D Attention U-Net Segmentation Model for BRISC Dataset.
-Specifically adapted from AttentionUnet 2D.ipynb.
+2D Vision Transformer Segmentation Model for BRISC Dataset.
+Uses hierarchical Vision Transformer U-Net (mit_b2 / SegFormer) pre-trained on ImageNet,
+specifically adapted from SwinUNETR.ipynb.
 """
 
 from __future__ import annotations
 from pathlib import Path
 from typing import Optional
+import numpy as np
 import torch
 import torch.nn as nn
 from loguru import logger
-from monai.networks.nets import AttentionUnet
+import segmentation_models_pytorch as smp
 
 
 class SegmentationModel:
     """
-    Wrapper around MONAI 2D Attention U-Net for brain tumor segmentation.
+    Wrapper around 2D Pretrained Vision Transformer U-Net (SegFormer / mit_b2)
+    for brain tumor segmentation.
     """
 
     def __init__(
         self,
-        spatial_dims: int = 2,
+        encoder_name: str = "mit_b2",
         in_channels: int = 3,   # RGB images from BRISC dataset
         out_channels: int = 2,  # Background vs Tumor
-        channels: tuple[int, ...] = (32, 64, 128, 256, 512, 1024),
-        strides: tuple[int, ...] = (2, 2, 2, 2, 2),
-        dropout: float = 0.3,
+        encoder_weights: Optional[str] = None,
         device: str = "cuda",
+        **kwargs,
     ):
         self.device = device if torch.cuda.is_available() else "cpu"
+        self.encoder_name = encoder_name
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
-        self.model = AttentionUnet(
-            spatial_dims=spatial_dims,
-            in_channels=in_channels,
-            out_channels=out_channels,
-            channels=channels,
-            strides=strides,
-            dropout=dropout,
+        self.model = smp.Unet(
+            encoder_name=self.encoder_name,
+            encoder_weights=encoder_weights,
+            in_channels=self.in_channels,
+            classes=self.out_channels,
         ).to(self.device)
 
         self.model.eval()
         logger.info(
-            f"SegmentationModel 2D (AttentionUnet) initialised on {self.device}"
+            f"SegmentationModel 2D ({self.encoder_name} U-Net) initialised on {self.device}"
         )
 
     def load_weights(self, path: str | Path) -> None:
@@ -71,7 +74,7 @@ class SegmentationModel:
         return preds.squeeze(0)
 
     @torch.no_grad()
-    def predict_with_probabilities(
+    def predict_probs(
         self, image_tensor: torch.Tensor, postprocess: bool = True, min_component_size: int = 30, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """

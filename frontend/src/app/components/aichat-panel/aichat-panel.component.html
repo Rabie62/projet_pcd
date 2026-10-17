@@ -1,76 +1,87 @@
-<div class="glass-panel chat-container" style="height: calc(100vh - 4rem); display: flex; flex-direction: column; overflow: hidden;">
-  <div class="card-header">
-    <div class="header-main">
-      <div class="status-indicator"></div>
-      <h2>Dialogue Agent <span class="model-badge">Gemma 3 1B</span></h2>
+<div class="glass-panel chat-container" style="height: calc(100vh - 4rem); display: flex; flex-direction: row; overflow: hidden;">
+  <!-- Conversations Sidebar -->
+  <aside class="chat-sidebar">
+    <div class="sidebar-top">
+      <button class="new-chat-btn" (click)="newConversation()">
+        <lucide-icon [name]="PlusIcon" [size]="16"></lucide-icon>
+        <span>Nouvelle conversation</span>
+      </button>
     </div>
-    <div class="session-selector">
-      <lucide-icon [name]="SendIcon" [size]="14" class="text-muted"></lucide-icon>
-      <input 
-        type="text" 
-        placeholder="Attach Session ID..." 
-        [(ngModel)]="sessionId" 
-      />
+    <div class="conv-list">
+      <div 
+        *ngFor="let conv of conversations" 
+        class="conv-item" 
+        [class.active]="conv.id === activeConvId"
+        (click)="selectConversation(conv)">
+        <lucide-icon [name]="ChatIcon" [size]="16" class="conv-icon"></lucide-icon>
+        <div class="conv-info">
+          <span class="conv-title">{{ conv.title }}</span>
+          <span class="conv-time">{{ conv.updatedAt | date:'shortTime' }}</span>
+        </div>
+        <button class="conv-delete-btn" (click)="deleteConversation(conv.id, $event)" title="Supprimer">
+          <lucide-icon [name]="TrashIcon" [size]="14"></lucide-icon>
+        </button>
+      </div>
     </div>
-  </div>
-  
-  <div #scrollContainer class="card-body chat-messages">
-    <ng-container *ngFor="let msg of messages">
-      <div *ngIf="msg.role === 'user' || msg.text"
-          class="message-row"
-          [class.user-row]="msg.role === 'user'"
-          [class.assistant-row]="msg.role === 'assistant'">
-          
-        <div class="message-meta" *ngIf="msg.role === 'assistant'">
-          <div class="bot-avatar">
+  </aside>
+
+  <!-- Main Chat Area -->
+  <main class="chat-main">
+    <div #scrollContainer class="card-body chat-messages">
+      <ng-container *ngFor="let msg of messages">
+        <div *ngIf="msg.role === 'user' || msg.text"
+            class="message-row"
+            [class.user-row]="msg.role === 'user'"
+            [class.assistant-row]="msg.role === 'assistant'">
+            
+          <div class="message-meta" *ngIf="msg.role === 'assistant'">
+            <div class="bot-avatar">
+              <lucide-icon [name]="BotIcon" [size]="16"></lucide-icon>
+            </div>
+            <span class="label">Medical Assistant</span>
+          </div>
+
+          <div class="message-meta user-meta" *ngIf="msg.role === 'user'">
+            <span class="label">Doctor</span>
+            <div class="user-avatar">
+              <lucide-icon [name]="UserIcon" [size]="16"></lucide-icon>
+            </div>
+          </div>
+
+          <div class="message-content" [innerHTML]="renderMarkdown(msg.text)"></div>
+        </div>
+      </ng-container>
+
+      <!-- Typing Indicator -->
+      <div class="message-row assistant-row" *ngIf="loading">
+        <div class="message-meta">
+          <div class="bot-avatar loading-bot">
             <lucide-icon [name]="BotIcon" [size]="16"></lucide-icon>
           </div>
-          <span class="label">Medical Assistant</span>
+          <span class="label">Analyzing...</span>
         </div>
-
-        <div class="message-meta user-meta" *ngIf="msg.role === 'user'">
-          <span class="label">Doctor</span>
-          <div class="user-avatar">
-            <lucide-icon [name]="UserIcon" [size]="16"></lucide-icon>
+        <div class="message-content typing-content">
+          <div class="typing-dots">
+            <span></span><span></span><span></span>
           </div>
         </div>
-
-        <div class="message-content" [innerHTML]="renderMarkdown(msg.text)"></div>
-      </div>
-    </ng-container>
-
-    <!-- Typing Indicator -->
-    <div class="message-row assistant-row" *ngIf="loading">
-      <div class="message-meta">
-        <div class="bot-avatar loading-bot">
-          <lucide-icon [name]="BotIcon" [size]="16"></lucide-icon>
-        </div>
-        <span class="label">Analyzing...</span>
-      </div>
-      <div class="message-content typing-content">
-        <div class="typing-dots">
-          <span></span><span></span><span></span>
-        </div>
       </div>
     </div>
-  </div>
 
-  <div class="chat-input-area">
-    <form (submit)="sendMessage($event)" class="input-form">
-      <input 
-        type="text" 
-        placeholder="Discuss diagnostic findings, MRI protocols, or clinical research..." 
-        [(ngModel)]="input"
-        name="chatInput"
-        autocomplete="off"
-      />
-      <button type="submit" [disabled]="loading || !input.trim()">
-        <lucide-icon [name]="SendIcon" [size]="18"></lucide-icon>
-        <span>Send</span>
-      </button>
-    </form>
-    <div class="input-disclaimer">
-      Gemma 3 1B-IT logic. Grounded in diagnostic report. Final review required by radiologist.
+    <div class="chat-input-area">
+      <form (submit)="sendMessage($event)" class="input-form">
+        <input 
+          type="text" 
+          placeholder="Posez une question sur le diagnostic, l'IRM ou la prise en charge..." 
+          [(ngModel)]="input"
+          name="chatInput"
+          autocomplete="off"
+        />
+        <button type="submit" [disabled]="loading || !input.trim()">
+          <lucide-icon [name]="SendIcon" [size]="18"></lucide-icon>
+          <span>Envoyer</span>
+        </button>
+      </form>
     </div>
-  </div>
+  </main>
 </div>

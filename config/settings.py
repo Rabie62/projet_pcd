@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from functools import lru_cache
 from typing import Optional
+from loguru import logger
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -19,7 +20,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Model architecture and training configuration."""
+    seg_encoder_name: str = "mit_b2"
+    seg_weights_name: str = field(
+        default_factory=lambda: os.environ.get("SEGMENTATION_WEIGHTS_NAME", "segmentation_swinunetr.pth")
+    )
     seg_in_channels: int = 3      # RGB images
     seg_out_channels: int = 2     # Background vs Tumor
     seg_channels: tuple[int, ...] = (32, 64, 128, 256, 512, 1024)
@@ -29,11 +33,10 @@ class ModelConfig:
     clf_num_classes: int = 4
     clf_in_channels: int = 3
 
-    # LLM (Dialogue Agent)
-    llm_model_id: str = "google/gemma-3-1b-it"
-    llm_max_new_tokens: int = 1024
+    # LLM (Dialogue Agent via Ollama)
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2:3b"
     llm_temperature: float = 0.3
-    hf_token: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,7 @@ class PathConfig:
     models_dir: Path = field(default_factory=lambda: BASE_DIR / "models" / "pretrained")
     logs_dir: Path = field(default_factory=lambda: BASE_DIR / "logs")
     knowledge_dir: Path = field(default_factory=lambda: BASE_DIR / "knowledge")
-    outputs_dir: Path = field(default_factory=lambda: BASE_DIR / "outputs")
+    records_dir: Path = field(default_factory=lambda: BASE_DIR / "data" / "records")
     uploads_dir: Path = field(default_factory=lambda: BASE_DIR / "data" / "uploads")
     qdrant_storage_dir: Path = field(default_factory=lambda: BASE_DIR / "data" / "qdrant_storage")
 
@@ -77,7 +80,7 @@ class PathConfig:
         """Create all directories if they don't exist."""
         for p in [
             self.data_dir, self.models_dir, self.logs_dir,
-            self.knowledge_dir, self.outputs_dir,
+            self.knowledge_dir, self.records_dir,
             self.uploads_dir, self.qdrant_storage_dir
         ]:
             p.mkdir(parents=True, exist_ok=True)
@@ -107,7 +110,8 @@ class DatabaseConfig:
         """URL with password masked for logging."""
         if not self.host:
             return None
-        return f"mysql+pymysql://{self.user}:{encoded_pass}@{self.host}:{self.port}/{self.name}"
+        masked_pass = "***" if self.password else ""
+        return f"mysql+pymysql://{self.user}:{masked_pass}@{self.host}:{self.port}/{self.name}"
 
 
 @dataclass(frozen=True)
@@ -134,8 +138,9 @@ def get_settings() -> Settings:
     )
 
     model = ModelConfig(
-        llm_model_id=os.environ.get("LLM_MODEL_ID", "google/gemma-3-1b-it"),
-        hf_token=os.environ.get("HF_TOKEN"),
+        ollama_base_url=os.environ.get("OLLAMA_BASE_URL", ModelConfig.ollama_base_url),
+        ollama_model=os.environ.get("OLLAMA_MODEL", ModelConfig.ollama_model),
+        llm_temperature=float(os.environ.get("LLM_TEMPERATURE", str(ModelConfig.llm_temperature))),
     )
 
     # Parse CORS origins from env (comma-separated) or use defaults

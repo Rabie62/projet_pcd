@@ -5,6 +5,8 @@ nibabel
 einops
 tqdm
 torchvision
+segmentation-models-pytorch
+timm
 
 # Multi-Agent Framework
 langgraph
@@ -13,10 +15,7 @@ langchain-core
 # Image Processing
 Pillow
 
-# LLM - Gemma-3
-transformers
-accelerate
-sentencepiece
+# LLM - Ollama (local server via httpx)
 
 # API
 fastapi
@@ -32,6 +31,8 @@ scikit-image
 qdrant-client
 sentence-transformers
 PyPDF2
+PyMuPDF
+easyocr
 
 # Database (Patient History)
 sqlalchemy

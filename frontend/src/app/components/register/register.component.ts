@@ -65,7 +65,7 @@ export class RegisterComponent implements OnInit {
       next: () => {
         this.router.navigate(['/']);
       },
-      error: (err) => {
+      error: (err: any) => {
         this.error = err.message || 'Une erreur est survenue lors de la création du compte.';
         this.loading = false;
       }

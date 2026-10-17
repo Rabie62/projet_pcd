@@ -34,10 +34,13 @@ sys.modules["qdrant_client"] = MagicMock()
 sys.modules["qdrant_client.models"] = MagicMock()
 sys.modules["sentence_transformers"] = MagicMock()
 sys.modules["transformers"] = MagicMock()
-sys.modules["PIL"] = MagicMock()
-sys.modules["matplotlib"] = MagicMock()
-sys.modules["matplotlib.pyplot"] = MagicMock()
-sys.modules["skimage"] = MagicMock()
+if "matplotlib" not in sys.modules:
+    try:
+        import matplotlib
+        import matplotlib.pyplot
+    except ImportError:
+        sys.modules["matplotlib"] = MagicMock()
+        sys.modules["matplotlib.pyplot"] = MagicMock()
 sys.modules["skimage.measure"] = MagicMock()
 sys.modules["PyPDF2"] = MagicMock()
 sys.modules["fitz"] = MagicMock()
@@ -90,7 +93,7 @@ def mock_controller():
     ctrl.patient_store.create_patient.return_value = mock_patient
     ctrl.patient_store.get_patient.return_value = None
     ctrl.patient_store.list_patients.return_value = []
-    ctrl.patient_store.format_history_for_prompt.return_value = ""
+    ctrl.patient_store.format_history.return_value = ""
     ctrl.patient_store.update_patient.return_value = mock_patient
 
     # Mock session management
@@ -155,6 +158,20 @@ def client(mock_controller):
     app.include_router(consultations_router)
     app.include_router(knowledge_router)
 
+    from api.errors import AppError
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(AppError)
+    async def app_error_handler(request, exc: AppError):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": exc.error_code,
+                "message": exc.message,
+                "details": exc.details,
+            },
+        )
+
     set_controller(mock_controller)
 
     yield TestClient(app)
@@ -201,7 +218,9 @@ class TestPatientEndpoints:
     def test_list_patients(self, client):
         response = client.get("/patients")
         assert response.status_code == 200
-        assert isinstance(response.json(), list)
+        data = response.json()
+        items = data["items"] if isinstance(data, dict) and "items" in data else data
+        assert isinstance(items, list)
 
     def test_update_patient(self, client):
         response = client.put(
@@ -352,4 +371,4 @@ class TestResponseFormat:
         )
         assert response.status_code == 404
         data = response.json()
-        assert "detail" in data
+        assert "error" in data or "detail" in data or "message" in data

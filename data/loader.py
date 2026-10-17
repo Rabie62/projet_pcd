@@ -103,7 +103,7 @@ class BRISCDataLoader:
                 return self.build_patient(entry)
         raise FileNotFoundError(f"Patient '{patient_id}' not found")
 
-    def load_patient_from_path(self, image_path: str | Path) -> BRISCPatient:
+    def load_path(self, image_path: str | Path) -> BRISCPatient:
         image_path = Path(image_path)
         if not image_path.exists():
             raise FileNotFoundError(f"Image not found: {image_path}")

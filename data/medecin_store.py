@@ -19,12 +19,12 @@ from data.database import (
 from data.db import get_session_factory
 
 
-def _hash_password(password: str) -> str:
+def hash_password(password: str) -> str:
     """Hash a plain-text password using bcrypt."""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def _verify_password(password: str, hashed: str) -> bool:
+def verify_hash(password: str, hashed: str) -> bool:
     """Verify a plain-text password against a bcrypt hash."""
     return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
 
@@ -60,13 +60,13 @@ class MedecinConsultationStore:
             email=email,
             departement=departement,
             username=username,
-            password=_hash_password(password) if password else None,
+            password=hash_password(password) if password else None,
         )
         with self.session_factory() as session:
             session.add(medecin)
             session.commit()
             session.refresh(medecin)
-            _ = medecin.consultations
+            consultations = medecin.consultations
             session.expunge(medecin)
 
         logger.info(f"Medecin created: ID {medecin.id} ({nom} {prenom})")
@@ -78,7 +78,7 @@ class MedecinConsultationStore:
             medecin = session.get(Medecin, id)
             if medecin is None:
                 return None
-            _ = medecin.consultations
+            consultations = medecin.consultations
             session.expunge(medecin)
             return medecin
 
@@ -115,12 +115,12 @@ class MedecinConsultationStore:
             if username is not None:
                 medecin.username = username
             if password is not None:
-                medecin.password = _hash_password(password)
+                medecin.password = hash_password(password)
 
             medecin.updated_at = datetime.now(timezone.utc)
             session.commit()
             session.refresh(medecin)
-            _ = medecin.consultations
+            consultations = medecin.consultations
             session.expunge(medecin)
 
             logger.info(f"Medecin updated: ID {id}")
@@ -135,8 +135,8 @@ class MedecinConsultationStore:
             medecin = session.query(Medecin).filter_by(username=username).first()
             if medecin is None:
                 return None
-            if medecin.password and _verify_password(password, medecin.password):
-                _ = medecin.consultations
+            if medecin.password and verify_hash(password, medecin.password):
+                consultations = medecin.consultations
                 session.expunge(medecin)
                 return medecin
             return None
@@ -161,7 +161,7 @@ class MedecinConsultationStore:
                 Medecin.id.asc()
             ).all()
             for m in medecins:
-                _ = m.consultations
+                consultations = m.consultations
             session.expunge_all()
             return medecins
 
@@ -289,7 +289,7 @@ class MedecinConsultationStore:
             session.expunge_all()
             return consultations
 
-    def list_patient_consultations_with_names(self, patient_id: int) -> list[dict]:
+    def list_patient_named(self, patient_id: int) -> list[dict]:
         """List consultations for a patient with doctor and patient names."""
         with self.session_factory() as session:
             consultations = (
@@ -315,7 +315,7 @@ class MedecinConsultationStore:
             session.expunge_all()
             return results
 
-    def list_all_consultations_with_names(self) -> list[dict]:
+    def list_all_named(self) -> list[dict]:
         """List all consultations with doctor and patient names."""
         with self.session_factory() as session:
             consultations = (

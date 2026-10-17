@@ -1,45 +1,58 @@
 <div class="app-layout">
-  <aside *ngIf="authService.isLoggedIn()" class="sidebar" style="display: flex; flex-direction: column; height: 100%;" role="navigation" aria-label="Navigation principale">
+  <aside *ngIf="authService.isLoggedIn()" class="sidebar" role="navigation" aria-label="Navigation principale">
     <div class="sidebar-brand">
-      <lucide-icon [name]="ActivityIcon" class="text-primary"></lucide-icon>
-      <span>Medical AI Hub</span>
+      <div class="sidebar-logo-icon">
+        <lucide-icon [name]="ActivityIcon" [size]="22"></lucide-icon>
+      </div>
+      <div class="sidebar-brand-text">
+        <span class="brand-title">MEDICAL AI HUB</span>
+      </div>
     </div>
 
-    <nav style="display: flex; flex-direction: column; gap: 0.5rem; flex: 1;" aria-label="Menu">
+    <nav class="sidebar-nav" aria-label="Menu">
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="sidebar-link" aria-label="Gestion des patients">
-        <lucide-icon [name]="UsersIcon"></lucide-icon>
+        <lucide-icon [name]="UsersIcon" [size]="18"></lucide-icon>
         <span>Gestion Patients</span>
       </a>
       <a routerLink="/medecins" routerLinkActive="active" class="sidebar-link" aria-label="Gestion des médecins">
-        <lucide-icon [name]="StethoscopeIcon"></lucide-icon>
+        <lucide-icon [name]="StethoscopeIcon" [size]="18"></lucide-icon>
         <span>Gestion Médecins</span>
       </a>
       <a routerLink="/consultations" routerLinkActive="active" class="sidebar-link" aria-label="Gestion des consultations">
-        <lucide-icon [name]="ClipboardListIcon"></lucide-icon>
+        <lucide-icon [name]="ClipboardListIcon" [size]="18"></lucide-icon>
         <span>Gestion Consultations</span>
       </a>
       <a routerLink="/analysis" routerLinkActive="active" class="sidebar-link" aria-label="Gestion des examens">
-        <lucide-icon [name]="FileSearchIcon"></lucide-icon>
+        <lucide-icon [name]="FileSearchIcon" [size]="18"></lucide-icon>
         <span>Gestion Examens</span>
       </a>
       <a routerLink="/chat" routerLinkActive="active" class="sidebar-link" aria-label="Dialogue avec l'agent IA">
-        <lucide-icon [name]="MessageSquareIcon"></lucide-icon>
+        <lucide-icon [name]="MessageSquareIcon" [size]="18"></lucide-icon>
         <span>Dialogue Agent</span>
       </a>
       <a routerLink="/knowledge" routerLinkActive="active" class="sidebar-link" aria-label="Base de connaissances">
-        <lucide-icon [name]="DatabaseIcon"></lucide-icon>
+        <lucide-icon [name]="DatabaseIcon" [size]="18"></lucide-icon>
         <span>RAG Knowledge Base</span>
       </a>
-
-      <a (click)="logout()" (keydown.enter)="logout()" class="sidebar-link" style="margin-top: auto; cursor: pointer; color: var(--danger);" role="button" tabindex="0" aria-label="Se déconnecter">
-        <lucide-icon [name]="LogOutIcon" style="color: var(--danger);"></lucide-icon>
-        <span>Se déconnecter</span>
-      </a>
     </nav>
+
+    <!-- Practician profile badge -->
+    <div class="sidebar-practician-card">
+      <div class="practician-avatar">SM</div>
+      <div class="practician-info">
+        <span class="practician-name">Dr. Sarah Mansouri</span>
+        <span class="practician-role">Neuro-Radiologue</span>
+      </div>
+    </div>
+
+    <a (click)="logout()" (keydown.enter)="logout()" class="sidebar-link" style="cursor: pointer; color: var(--danger); margin-top: 0.25rem;" role="button" tabindex="0" aria-label="Se déconnecter">
+      <lucide-icon [name]="LogOutIcon" [size]="18" style="color: var(--danger);"></lucide-icon>
+      <span>Se déconnecter</span>
+    </a>
   </aside>
 
-  <main class="main-content" [style.padding]="authService.isLoggedIn() ? '2rem' : '0'" role="main">
-    <div class="page-container" [style.max-width]="authService.isLoggedIn() ? '1200px' : 'none'">
+  <main class="main-content" [style.padding]="authService.isLoggedIn() ? '1.5rem 2rem' : '0'" role="main">
+    <div class="page-container" [style.max-width]="authService.isLoggedIn() ? '1680px' : 'none'">
       <router-outlet></router-outlet>
     </div>
   </main>

@@ -15,7 +15,7 @@ from agents.graph import get_registry
 router = APIRouter()
 
 
-def _get_rag_system():
+def get_rag():
     """Get the RAG system instance from the agent registry."""
     registry = get_registry()
     rag_system = registry.rag_system
@@ -54,7 +54,7 @@ async def upload_document(
     Upload a clinical document to the RAG knowledge base.
     Supported formats: .txt, .md, .pdf
     """
-    rag = _get_rag_system()
+    rag = get_rag()
     content = await file.read()
     if len(content) == 0:
         raise HTTPException(400, "Uploaded file is empty")
@@ -79,7 +79,7 @@ async def upload_document(
 @router.get("/knowledge/documents", response_model=list[DocumentListItem], tags=["Knowledge Base"])
 async def list_documents():
     """List all uploaded documents in the knowledge base."""
-    rag = _get_rag_system()
+    rag = get_rag()
     documents = rag.list_documents()
     return [
         DocumentListItem(
@@ -94,7 +94,7 @@ async def list_documents():
 @router.delete("/knowledge/documents/{document_id}", tags=["Knowledge Base"])
 async def delete_document(document_id: str):
     """Delete an uploaded document from the knowledge base."""
-    rag = _get_rag_system()
+    rag = get_rag()
     deleted = rag.delete_document(document_id)
     if not deleted:
         raise NotFoundError(f"Document {document_id} not found")

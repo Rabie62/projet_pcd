@@ -22,7 +22,7 @@ def diagnostic_agent():
     yield agent
 
 
-def _make_vision_result(
+def make_vision(
     tumor_detected=True,
     segmentation_mask=None,
     tumor_class="Glioma",
@@ -60,24 +60,24 @@ def _make_vision_result(
 
 class TestFeatureExtraction:
     def test_no_tumor_returns_empty_features(self, diagnostic_agent):
-        vision = _make_vision_result(tumor_detected=False)
+        vision = make_vision(tumor_detected=False)
         features = diagnostic_agent.extract_features(vision)
         assert features.tumor_area_px == 0
         assert features.tumor_area_mm2 == 0.0
 
     def test_tumor_area_extracted(self, diagnostic_agent):
-        vision = _make_vision_result(tumor_detected=True)
+        vision = make_vision(tumor_detected=True)
         features = diagnostic_agent.extract_features(vision)
         assert features.tumor_area_px > 0
         assert features.tumor_area_mm2 > 0
 
     def test_tumor_ratio_calculated(self, diagnostic_agent):
-        vision = _make_vision_result(tumor_detected=True)
+        vision = make_vision(tumor_detected=True)
         features = diagnostic_agent.extract_features(vision)
         assert 0 < features.tumor_ratio < 1
 
     def test_location_description_present(self, diagnostic_agent):
-        vision = _make_vision_result(tumor_detected=True)
+        vision = make_vision(tumor_detected=True)
         features = diagnostic_agent.extract_features(vision)
         assert len(features.location_description) > 0
 
@@ -98,36 +98,36 @@ class TestLocationDetermination:
 
 class TestReportGeneration:
     def test_no_tumor_report(self, diagnostic_agent):
-        vision = _make_vision_result(tumor_detected=False)
+        vision = make_vision(tumor_detected=False)
         report = diagnostic_agent.generate_report(vision)
         assert report.tumor_detected is False
         assert report.classification == "No Tumor"
         assert report.tumor_features is None
 
     def test_tumor_report_has_features(self, diagnostic_agent):
-        vision = _make_vision_result(tumor_detected=True)
+        vision = make_vision(tumor_detected=True)
         report = diagnostic_agent.generate_report(vision)
         assert report.tumor_detected is True
         assert report.tumor_features is not None
         assert report.classification == "Glioma"
 
     def test_low_confidence_adds_flag(self, diagnostic_agent):
-        vision = _make_vision_result(confidence=0.5)
+        vision = make_vision(confidence=0.5)
         report = diagnostic_agent.generate_report(vision)
         assert any("Confiance IA modérée" in f for f in report.flags)
 
     def test_report_has_patient_id(self, diagnostic_agent):
-        vision = _make_vision_result()
+        vision = make_vision()
         report = diagnostic_agent.generate_report(vision)
         assert report.patient_id == "test_001"
 
     def test_report_has_timestamp(self, diagnostic_agent):
-        vision = _make_vision_result()
+        vision = make_vision()
         report = diagnostic_agent.generate_report(vision)
         assert len(report.timestamp) > 0
 
     def test_report_to_dict(self, diagnostic_agent):
-        vision = _make_vision_result()
+        vision = make_vision()
         report = diagnostic_agent.generate_report(vision)
         d = report.to_dict()
         assert "patient_id" in d

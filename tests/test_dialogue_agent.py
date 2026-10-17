@@ -10,24 +10,14 @@ from agents.diagnostic import DiagnosticReport, TumorFeatures
 
 @pytest.fixture
 def mock_dialogue_agent():
-    """Create a DialogueAgent with mocked tokenizer and model."""
+    """Create a DialogueAgent with mocked generate_chat."""
     agent = DialogueAgent()
     agent.model_loaded = True
-    agent.tokenizer = MagicMock()
-    agent.tokenizer.pad_token_id = 0
-    agent.tokenizer.eos_token_id = 1
-    
-    mock_input_ids = MagicMock()
-    mock_input_ids.shape = (1, 3)
-    agent.tokenizer.apply_chat_template = MagicMock(return_value={"input_ids": mock_input_ids})
-    agent.tokenizer.decode = MagicMock(return_value="Réponse de test pour le médecin.")
-    agent.model = MagicMock()
-    agent.model.generate = MagicMock(return_value=[[1, 2, 3, 4, 5]])
-    agent.model.device = "cpu"
+    agent.generate_chat = MagicMock(return_value="Réponse de test pour le médecin.")
     return agent
 
 
-def _make_sample_report(patient_id="patient_101", classification="Glioma", tumor_detected=True):
+def make_report(patient_id="patient_101", classification="Glioma", tumor_detected=True):
     return DiagnosticReport(
         patient_id=patient_id,
         timestamp="2026-08-25T12:00:00Z",
@@ -73,8 +63,8 @@ class TestDialogueSessionMemory:
         assert hist_b[0]["user"] == "Question B"
 
     def test_per_session_report_context(self, mock_dialogue_agent):
-        report_a = _make_sample_report(patient_id="patient_A", classification="Glioma")
-        report_b = _make_sample_report(patient_id="patient_B", classification="Meningioma")
+        report_a = make_report(patient_id="patient_A", classification="Glioma")
+        report_b = make_report(patient_id="patient_B", classification="Meningioma")
 
         mock_dialogue_agent.set_report_context(report_a, session_id="session_A")
         mock_dialogue_agent.set_report_context(report_b, session_id="session_B")
@@ -96,7 +86,7 @@ class TestDialogueSessionMemory:
         assert len(mock_dialogue_agent.get_session_history("session_2")) == 1
 
     def test_chat_method_records_into_session_memory(self, mock_dialogue_agent):
-        report = _make_sample_report(patient_id="patient_99", classification="Pituitary")
+        report = make_report(patient_id="patient_99", classification="Pituitary")
         mock_dialogue_agent.set_report_context(report, session_id="session_99")
 
         res = mock_dialogue_agent.chat("Où est située la lésion ?", session_id="session_99")

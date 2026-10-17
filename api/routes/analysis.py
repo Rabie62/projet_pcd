@@ -31,36 +31,36 @@ from api.schemas import (
 from agents.controller import ControllerAgent
 from agents import graph
 from interpretability.visualizations import BRISCVisualizer
-from api.routes.response_builder import build_analysis_response
+from api.routes.response_builder import build_response
 from api.errors import NotFoundError, ValidationError, ConflictError, ServiceUnavailableError
 
 router = APIRouter()
 
 # Singleton controller — initialized at startup
-controller_instance: Optional[ControllerAgent] = None
-visualizer_instance: Optional[BRISCVisualizer] = None
+controller: Optional[ControllerAgent] = None
+visualizer: Optional[BRISCVisualizer] = None
 
 # Thread pool for running blocking ML inference
-_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ml-inference")
+executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ml-inference")
 
 
 def get_controller() -> ControllerAgent:
-    global controller_instance
-    if controller_instance is None:
+    global controller
+    if controller is None:
         raise ServiceUnavailableError("System not initialized. Wait for startup.")
-    return controller_instance
+    return controller
 
 
-def set_controller(controller: ControllerAgent) -> None:
-    global controller_instance
-    controller_instance = controller
+def set_controller(instance: ControllerAgent) -> None:
+    global controller
+    controller = instance
 
 
 def get_visualizer() -> BRISCVisualizer:
-    global visualizer_instance
-    if visualizer_instance is None:
-        visualizer_instance = BRISCVisualizer()
-    return visualizer_instance
+    global visualizer
+    if visualizer is None:
+        visualizer = BRISCVisualizer()
+    return visualizer
 
 
 # ── Health ──────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ async def health_check():
 
 # ── Analysis (shared implementation) ────────────────────────────────────
 
-def _run_analysis(
+def run_analysis(
     image_path: Path,
     patient_id: Optional[int],
     clinical_notes: Optional[str],
@@ -116,7 +116,7 @@ async def analyze_patient(request: AnalyzeRequest):
     try:
         if patient_dir.is_file():
             session = await loop.run_in_executor(
-                _executor,
+                executor,
                 lambda: ctrl.analyze_image_file(
                     patient_dir,
                     patient_id=request.patient_id,
@@ -125,7 +125,7 @@ async def analyze_patient(request: AnalyzeRequest):
             )
         else:
             session = await loop.run_in_executor(
-                _executor,
+                executor,
                 lambda: ctrl.analyze_image_dir(
                     patient_dir,
                     patient_id=request.patient_id,
@@ -135,11 +135,11 @@ async def analyze_patient(request: AnalyzeRequest):
     except FileNotFoundError as e:
         raise NotFoundError(str(e))
 
-    return build_analysis_response(session, ctrl)
+    return build_response(session, ctrl)
 
 
 @router.post("/analyze/upload", response_model=AnalysisResponse, tags=["Analysis"])
-async def analyze_patient_upload(
+async def analyze_upload(
     file: UploadFile = File(...),
     patient_id: Optional[int] = Form(None),
     clinical_notes: Optional[str] = Form(None),
@@ -166,7 +166,7 @@ async def analyze_patient_upload(
             shutil.copyfileobj(file.file, buffer)
         loop = asyncio.get_event_loop()
         session = await loop.run_in_executor(
-            _executor,
+            executor,
             lambda: ctrl.analyze_image_file(
                 temp_file_path,
                 patient_id=patient_id,
@@ -179,7 +179,7 @@ async def analyze_patient_upload(
         raise  # let the global handler return 500
 
     shutil.rmtree(temp_dir_path, ignore_errors=True)
-    return build_analysis_response(session, ctrl)
+    return build_response(session, ctrl)
 
 
 # ── Chat ────────────────────────────────────────────────────────────────
@@ -190,7 +190,7 @@ async def chat(request: ChatRequest):
     ctrl = get_controller()
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
-        _executor,
+        executor,
         lambda: ctrl.chat(request.query, request.session_id),
     )
     return ChatResponse(
@@ -243,18 +243,9 @@ def clear_chat_history(session_id: str):
     responses={200: {"content": {"image/png": {}}}},
 )
 def get_overlay(session_id: str):
-    """Get 2D summary (Image, GT if available, AI Prediction)."""
-    return get_summary(session_id)
-
-
-@router.get(
-    "/summary/{session_id}",
-    tags=["Visualization"],
-    responses={200: {"content": {"image/png": {}}}},
-)
-def get_summary(session_id: str):
-    """Get 2D summary grid for BRISC sessions."""
+    """Get standalone 2D MRI with AI segmentation overlay (single image)."""
     ctrl = get_controller()
+
     session = ctrl.get_session(session_id)
     if session is None:
         raise NotFoundError(f"Session {session_id} not found")
@@ -264,15 +255,21 @@ def get_summary(session_id: str):
         raise ValidationError("No results found")
 
     viz = get_visualizer()
-    gt_mask = getattr(vision_result, 'ground_truth_mask', None)
-    gradcam_map = getattr(vision_result, 'gradcam_map', None)
-    png = viz.generate_summary(
+    png = viz.segmentation_overlay(
         vision_result.preprocessed_image,
-        seg_mask=gt_mask,
         pred_mask=vision_result.segmentation_mask,
-        gradcam_map=gradcam_map,
     )
     return Response(content=png, media_type="image/png")
+
+
+@router.get(
+    "/summary/{session_id}",
+    tags=["Visualization"],
+    responses={200: {"content": {"image/png": {}}}},
+)
+def get_summary(session_id: str):
+    """Get standalone 2D MRI with AI segmentation overlay (single image)."""
+    return get_overlay(session_id)
 
 
 @router.get(
@@ -281,8 +278,9 @@ def get_summary(session_id: str):
     responses={200: {"content": {"image/png": {}}}},
 )
 def get_gradcam_overlay(session_id: str):
-    """Get standalone Grad-CAM visual explainability heatmap overlay."""
+    """Get Grad-CAM visual heatmap overlay generated dynamically in memory."""
     ctrl = get_controller()
+
     session = ctrl.get_session(session_id)
     if session is None:
         raise NotFoundError(f"Session {session_id} not found")
@@ -296,7 +294,7 @@ def get_gradcam_overlay(session_id: str):
         raise NotFoundError("Grad-CAM map not available for this session")
 
     viz = get_visualizer()
-    png = viz.generate_gradcam_overlay(
+    png = viz.gradcam_overlay(
         vision_result.preprocessed_image,
         gradcam_map=gradcam_map,
         alpha=0.5,
@@ -311,22 +309,51 @@ async def get_report(session_id: str):
     """Retrieve the full diagnostic report for an analysis session."""
     ctrl = get_controller()
     session = ctrl.get_session(session_id)
-    if session is None:
-        raise NotFoundError(f"Session {session_id} not found")
 
-    report = session.get("diagnostic_report")
-    if report is None:
-        raise ValidationError("No report available for this session")
+    if session is not None and session.get("diagnostic_report") is not None:
+        report = session["diagnostic_report"]
+        safety_check = session.get("safety_check")
+        return {
+            "report": report.to_dict(),
+            "safety_check": {
+                "passed": safety_check.passed,
+                "requires_human_review": safety_check.requires_human_review,
+                "flags": safety_check.flags,
+                "warnings": safety_check.warnings,
+            } if safety_check else None,
+            "disclaimer": ctrl.get_disclaimer(),
+        }
 
-    safety_check = session.get("safety_check")
+    # Fallback to MySQL database if session is not in memory
+    scan = ctrl.patient_store.get_scan(session_id)
+    if scan is None:
+        raise NotFoundError(f"Session {session_id} not found in memory or database")
+
     return {
-        "report": report.to_dict(),
+        "report": {
+            "patient_id": str(scan.patient_id),
+            "timestamp": scan.scan_date.isoformat() if scan.scan_date else "",
+            "tumor_detected": bool(scan.classification and scan.classification != "No Tumor"),
+            "tumor_features": {
+                "tumor_area_mm2": scan.tumor_area_mm2 or 0.0,
+                "max_diameter_mm": scan.max_diameter_mm or 0.0,
+                "location_description": scan.tumor_location or "",
+            } if (scan.tumor_area_mm2 or scan.max_diameter_mm or scan.tumor_location) else None,
+            "classification": scan.classification,
+            "classification_confidence": scan.confidence or 0.0,
+            "classification_probabilities": {},
+            "who_grade": None,
+            "clinical_summary": scan.clinical_summary or "",
+            "recommendations": [],
+            "flags": [],
+            "report_version": "2.1-BRISC (persisted)",
+        },
         "safety_check": {
-            "passed": safety_check.passed,
-            "requires_human_review": safety_check.requires_human_review,
-            "flags": safety_check.flags,
-            "warnings": safety_check.warnings,
-        } if safety_check else None,
+            "passed": scan.review_status == "approved",
+            "requires_human_review": scan.review_status == "pending_review",
+            "flags": [],
+            "warnings": [],
+        },
         "disclaimer": ctrl.get_disclaimer(),
     }
 

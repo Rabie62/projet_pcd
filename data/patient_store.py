@@ -80,7 +80,7 @@ class PatientStore:
             session.commit()
             session.refresh(patient)
             # Access relationship to eager-load before detachment
-            _ = patient.scans
+            scans = patient.scans
             # Detach from session so it can be used outside
             session.expunge(patient)
 
@@ -94,7 +94,7 @@ class PatientStore:
             if patient is None:
                 return None
             # Eager-load scans before detaching
-            _ = patient.scans
+            scans = patient.scans
             session.expunge(patient)
             return patient
 
@@ -139,7 +139,7 @@ class PatientStore:
             patient.updated_at = datetime.now(timezone.utc)
             session.commit()
             session.refresh(patient)
-            _ = patient.scans
+            scans = patient.scans
             session.expunge(patient)
 
             logger.info(f"Patient updated: ID {id}")
@@ -166,7 +166,7 @@ class PatientStore:
             ).all()
             # Eager-load scans for each patient
             for p in patients:
-                _ = p.scans
+                scans = p.scans
             session.expunge_all()
             return patients
 
@@ -183,6 +183,8 @@ class PatientStore:
         tumor_location: Optional[str] = None,
         clinical_summary: Optional[str] = None,
         review_status: str = "pending_review",
+        image_path: Optional[str] = None,
+        file_hash: Optional[str] = None,
     ) -> Optional[ScanRecord]:
         """
         Link an analysis session to a patient as a scan record.
@@ -197,6 +199,8 @@ class PatientStore:
             tumor_location: tumor location description
             clinical_summary: LLM-generated report summary
             review_status: review status for the scan
+            image_path: path to original scan image
+            file_hash: SHA-256 hash of scan image
 
         Returns:
             Created ScanRecord or None if patient not found
@@ -230,6 +234,8 @@ class PatientStore:
                 max_diameter_mm=max_diameter_mm,
                 tumor_location=tumor_location,
                 clinical_summary=clinical_summary,
+                image_path=image_path,
+                file_hash=file_hash,
                 review_status=review_status,
             )
             session.add(record)
@@ -276,9 +282,19 @@ class PatientStore:
             session.expunge(record)
             return record
 
+    def get_scan(self, session_id: str) -> Optional[ScanRecord]:
+        """Get a single scan record by session_id."""
+        with self.session_factory() as session:
+            record = session.query(ScanRecord).filter_by(
+                session_id=session_id
+            ).first()
+            if record:
+                session.expunge(record)
+            return record
+
     # ── History Formatting for LLM Prompt ─────────────────────────────
 
-    def format_history_for_prompt(self, patient_id: int) -> str:
+    def format_history(self, patient_id: int) -> str:
         """
         Format a patient's full history into a text block for LLM injection (BRISC).
 
@@ -288,7 +304,7 @@ class PatientStore:
         if patient is None:
             return ""
 
-        parts = ["PATIENT HISTORY:"]
+        parts = ["HISTORIQUE DU PATIENT :"]
 
         # Demographics
         demo = f"Patient: {patient.prenom} {patient.nom}"
@@ -313,35 +329,36 @@ class PatientStore:
         # Prior scans
         scans = self.get_scan_history(patient_id)
         if scans:
-            parts.append("\nPRIOR SCANS:")
+            parts.append("\nEXAMENS IRM ANTERIEURS :")
             for i, scan in enumerate(scans, 1):
                 date_str = scan.scan_date.strftime("%Y-%m-%d")
                 scan_line = f"[{i}] {date_str}"
                 if scan.classification:
                     scan_line += f" — {scan.classification}"
                 if scan.confidence is not None:
-                    scan_line += f" (conf: {scan.confidence:.2f})"
+                    scan_line += f" (confiance: {scan.confidence:.1%})"
                 if scan.max_diameter_mm is not None:
-                    scan_line += f", {scan.max_diameter_mm:.1f}mm diameter"
+                    scan_line += f", diametre: {scan.max_diameter_mm:.1f} mm"
                 if scan.tumor_location:
-                    scan_line += f", {scan.tumor_location}"
+                    scan_line += f", localisation: {scan.tumor_location}"
                 parts.append(scan_line)
 
                 # Review status
                 if scan.review_status == "approved" and scan.reviewed_by:
-                    parts.append(
-                        f"    Status: Approved by {scan.reviewed_by}"
-                    )
+                    parts.append(f"    Validation: Valide par Dr {scan.reviewed_by}")
                 elif scan.review_status == "rejected":
-                    parts.append(f"    Status: Rejected")
-                else:
-                    parts.append(f"    Status: {scan.review_status}")
+                    parts.append("    Validation: Rejete")
+                elif scan.review_status:
+                    parts.append(f"    Statut: {scan.review_status}")
 
-                # Clinical summary excerpt
+                # Clean conclusion excerpt (avoiding recursive summary duplication)
                 if scan.clinical_summary:
-                    summary = scan.clinical_summary[:200]
-                    if len(scan.clinical_summary) > 200:
-                        summary += "..."
-                    parts.append(f"    Summary: {summary}")
+                    txt = scan.clinical_summary
+                    if "## 4. CONCLUSION" in txt:
+                        txt = txt.split("## 4. CONCLUSION")[-1].replace("ET RECOMMANDATIONS", "").strip()
+                    lines = [l.strip() for l in txt.splitlines() if l.strip() and not l.startswith("##")]
+                    if lines:
+                        conc = lines[0][:150]
+                        parts.append(f"    Conclusion: {conc}")
 
         return "\n".join(parts)

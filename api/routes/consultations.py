@@ -16,20 +16,20 @@ from data.database import Patient, Medecin, Consultation, ScanRecord
 
 router = APIRouter()
 
-_medecin_store = None
+store = None
 
 
-def _get_store():
-    global _medecin_store
-    if _medecin_store is None:
+def get_store():
+    global store
+    if store is None:
         from data.medecin_store import MedecinConsultationStore
-        _medecin_store = MedecinConsultationStore()
-    return _medecin_store
+        store = MedecinConsultationStore()
+    return store
 
 
-def _build_consultation_response(consultation, patient_nom=None, patient_prenom=None,
-                                  medecin_nom=None, medecin_prenom=None,
-                                  medecin_specialite=None, session_id=None) -> ConsultationResponse:
+def to_response(consultation, patient_nom=None, patient_prenom=None,
+                medecin_nom=None, medecin_prenom=None,
+                medecin_specialite=None, session_id=None) -> ConsultationResponse:
     return ConsultationResponse(
         id=consultation.id, patient_id=consultation.patient_id,
         patient_nom=patient_nom, patient_prenom=patient_prenom,
@@ -45,14 +45,14 @@ def _build_consultation_response(consultation, patient_nom=None, patient_prenom=
     )
 
 
-def _fetch_consultation_with_names(consultation):
-    store = _get_store()
-    with store.session_factory() as session:
+def fetch_named(consultation):
+    st = get_store()
+    with st.session_factory() as session:
         patient = session.get(Patient, consultation.patient_id)
         medecin = session.get(Medecin, consultation.medecin_id)
         scan_record = session.get(ScanRecord, consultation.scan_record_id) if consultation.scan_record_id else None
         session.expunge_all()
-    return _build_consultation_response(
+    return to_response(
         consultation,
         patient_nom=patient.nom if patient else None,
         patient_prenom=patient.prenom if patient else None,
@@ -66,9 +66,9 @@ def _fetch_consultation_with_names(consultation):
 @router.post("/consultations", response_model=ConsultationResponse, tags=["Consultations"], status_code=201)
 async def create_consultation(request: ConsultationCreateRequest):
     """Create a new consultation linking a patient and a doctor."""
-    store = _get_store()
+    st = get_store()
     try:
-        consultation = store.create_consultation(
+        consultation = st.create_consultation(
             patient_id=request.patient_id, medecin_id=request.medecin_id,
             scan_record_id=request.scan_record_id, motif=request.motif,
             diagnostic=request.diagnostic, notes=request.notes,
@@ -78,7 +78,7 @@ async def create_consultation(request: ConsultationCreateRequest):
         raise  # global handler
     if consultation is None:
         raise HTTPException(400, "Patient or Médecin not found, or scan does not belong to this patient.")
-    return _fetch_consultation_with_names(consultation)
+    return fetch_named(consultation)
 
 
 @router.get("/consultations", response_model=PaginatedResponse[ConsultationListItem], tags=["Consultations"])
@@ -89,8 +89,8 @@ async def list_consultations(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
 ):
     """List all consultations, optionally filtered by patient or doctor, with pagination."""
-    store = _get_store()
-    results = store.list_all_consultations_with_names()
+    st = get_store()
+    results = st.list_all_named()
     if patient_id is not None:
         results = [r for r in results if r["consultation"].patient_id == patient_id]
     if medecin_id is not None:
@@ -119,32 +119,32 @@ async def list_consultations(
 @router.get("/consultations/{id}", response_model=ConsultationResponse, tags=["Consultations"])
 async def get_consultation(id: int):
     """Get a consultation's full details."""
-    store = _get_store()
-    consultation = store.get_consultation(id)
+    st = get_store()
+    consultation = st.get_consultation(id)
     if consultation is None:
         raise NotFoundError(f"Consultation {id} not found")
-    return _fetch_consultation_with_names(consultation)
+    return fetch_named(consultation)
 
 
 @router.put("/consultations/{id}", response_model=ConsultationResponse, tags=["Consultations"])
 async def update_consultation(id: int, request: ConsultationUpdateRequest):
     """Update a consultation's information."""
-    store = _get_store()
-    consultation = store.update_consultation(
+    st = get_store()
+    consultation = st.update_consultation(
         id=id, medecin_id=request.medecin_id, motif=request.motif,
         diagnostic=request.diagnostic, notes=request.notes,
         rapport_genere=request.rapport_genere, statut=request.statut,
     )
     if consultation is None:
         raise NotFoundError(f"Consultation {id} not found")
-    return _fetch_consultation_with_names(consultation)
+    return fetch_named(consultation)
 
 
 @router.delete("/consultations/{id}", tags=["Consultations"])
 async def delete_consultation(id: int):
     """Delete a consultation record."""
-    store = _get_store()
-    deleted = store.delete_consultation(id)
+    st = get_store()
+    deleted = st.delete_consultation(id)
     if not deleted:
         raise NotFoundError(f"Consultation {id} not found")
     return {"id": id, "message": "Consultation deleted successfully"}

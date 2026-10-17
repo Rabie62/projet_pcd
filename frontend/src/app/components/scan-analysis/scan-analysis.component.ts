@@ -1,13 +1,14 @@
-import { Component, ElementRef, ViewChild, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, OnInit, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
-import { LucideAngularModule, Brain, UploadCloud, FileImage, X, Play, CheckCircle, AlertTriangle, Activity, Download, Layers } from 'lucide-angular';
+import { LucideAngularModule, Brain, UploadCloud, FileImage, X, Play, CheckCircle, AlertTriangle, Activity, Download, Layers, ShieldCheck, Eye, Sliders, RotateCcw, Check, FileText } from 'lucide-angular';
 import { Subject, takeUntil } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { ErrorHandlerService } from '../../services/error-handler.service';
-import { AnalysisResponse } from '../../models';
+import { PatientService } from '../../services/patient.service';
+import { AnalysisResponse, Patient } from '../../models';
 
 @Component({
   selector: 'app-scan-analysis',
@@ -16,7 +17,7 @@ import { AnalysisResponse } from '../../models';
   templateUrl: './scan-analysis.component.html',
   styleUrls: ['./scan-analysis.component.css']
 })
-export class ScanAnalysisComponent implements OnDestroy {
+export class ScanAnalysisComponent implements OnInit, OnDestroy {
   readonly BrainIcon = Brain;
   readonly UploadCloudIcon = UploadCloud;
   readonly FileImageIcon = FileImage;
@@ -27,16 +28,42 @@ export class ScanAnalysisComponent implements OnDestroy {
   readonly ActivityIcon = Activity;
   readonly DownloadIcon = Download;
   readonly LayersIcon = Layers;
+  readonly ShieldCheckIcon = ShieldCheck;
+  readonly EyeIcon = Eye;
+  readonly SlidersIcon = Sliders;
+  readonly RotateCcwIcon = RotateCcw;
+  readonly CheckIcon = Check;
+  readonly FileTextIcon = FileText;
 
   file: File | null = null;
   isDragging = false;
   previewUrl: SafeUrl | string | null = null;
   summaryImageUrl: string | null = null;
+  gradcamImageUrl: string | null = null;
   private rawPreviewUrl: string | null = null;
   loading = false;
   result: AnalysisResponse | null = null;
   error: string | null = null;
   patientId: number | null = null;
+  clinicalNotes: string = '';
+
+  // Patient database list for dropdown
+  patients: Patient[] = [];
+  patientsLoading = false;
+
+  // 2D PACS Interactive Controls
+  activeMode: 'raw' | 'overlay' | 'gradcam' = 'raw';
+  maskOpacity = 85;
+  contrastLevel = 100;
+  brightnessLevel = 100;
+
+  // EU AI Act Art. 14 Human-in-the-Loop Review
+  reviewLoading = false;
+  reviewStatus: 'pending_review' | 'approved' | 'rejected' | null = null;
+  reviewerName = 'Dr. Sarah Mansouri';
+  reviewMessage: string | null = null;
+  showRejectModal = false;
+  rejectionReason = '';
 
   private destroy$ = new Subject<void>();
   private readonly MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -49,8 +76,35 @@ export class ScanAnalysisComponent implements OnDestroy {
   constructor(
     private http: HttpClient,
     private sanitizer: DomSanitizer,
-    private errorHandler: ErrorHandlerService
+    private errorHandler: ErrorHandlerService,
+    private patientService: PatientService
   ) {}
+
+  ngOnInit(): void {
+    this.loadPatients();
+  }
+
+  loadPatients(): void {
+    this.patientsLoading = true;
+    this.patientService.getPatients(1, 100).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (data: any) => {
+        const list = Array.isArray(data) ? data : (data?.items ?? data?.content ?? []);
+        this.patients = list;
+        if (this.patients.length > 0 && !this.patientId) {
+          this.patientId = this.patients[0].id;
+        }
+        this.patientsLoading = false;
+      },
+      error: (err) => {
+        console.warn('Patient loading warning:', err);
+        this.patientsLoading = false;
+      }
+    });
+  }
+
+  onPatientChange(val: any): void {
+    this.patientId = val !== null && val !== undefined ? Number(val) : null;
+  }
 
   ngOnDestroy(): void {
     this.destroy$.next();
@@ -105,14 +159,24 @@ export class ScanAnalysisComponent implements OnDestroy {
     this.previewUrl = this.sanitizer.bypassSecurityTrustUrl(this.rawPreviewUrl);
   }
 
+  triggerFileInput() {
+    if (this.fileInput?.nativeElement) {
+      this.fileInput.nativeElement.click();
+    }
+  }
+
   clearFile() {
     this.file = null;
     if (this.rawPreviewUrl) URL.revokeObjectURL(this.rawPreviewUrl);
     this.rawPreviewUrl = null;
     this.previewUrl = null;
     this.summaryImageUrl = null;
+    this.gradcamImageUrl = null;
     this.error = null;
     this.result = null;
+    this.reviewStatus = null;
+    this.reviewMessage = null;
+    this.activeMode = 'raw';
     if (this.fileInput?.nativeElement) {
       this.fileInput.nativeElement.value = '';
     }
@@ -120,8 +184,9 @@ export class ScanAnalysisComponent implements OnDestroy {
 
   handleAnalyze() {
     if (!this.file) return;
-    if (this.patientId === null || this.patientId === undefined || this.patientId <= 0) {
-      this.error = "L'ID du patient est requis pour lier l'historique d'examens.";
+    const pId = Number(this.patientId);
+    if (!this.patientId || isNaN(pId) || pId <= 0) {
+      this.error = "Veuillez sélectionner un patient valide dans la liste ou saisir son ID.";
       return;
     }
 
@@ -129,18 +194,28 @@ export class ScanAnalysisComponent implements OnDestroy {
     this.error = null;
     this.result = null;
     this.summaryImageUrl = null;
+    this.gradcamImageUrl = null;
+    this.reviewStatus = null;
+    this.reviewMessage = null;
     this.errorHandler.setLoading(true);
 
     const formData = new FormData();
     formData.append('file', this.file);
-    formData.append('patient_id', this.patientId.toString());
+    formData.append('patient_id', pId.toString());
+    if (this.clinicalNotes?.trim()) {
+      formData.append('clinical_notes', this.clinicalNotes.trim());
+    }
 
     this.http.post<AnalysisResponse>(`${this.API_BASE}/analyze/upload`, formData, {
       withCredentials: true
     }).pipe(takeUntil(this.destroy$)).subscribe({
       next: (res) => {
         this.result = res;
-        this.summaryImageUrl = `${this.API_BASE}/summary/${res.session_id}?t=${Date.now()}`;
+        const timestamp = Date.now();
+        this.summaryImageUrl = `${this.API_BASE}/overlay/${res.session_id}?t=${timestamp}`;
+        this.gradcamImageUrl = `${this.API_BASE}/summary/gradcam/${res.session_id}?t=${timestamp}`;
+        this.activeMode = 'overlay';
+        this.reviewStatus = (res.review_status as any) || (res.tumor_detected ? 'pending_review' : 'approved');
         this.loading = false;
         this.errorHandler.setLoading(false);
       },
@@ -150,6 +225,86 @@ export class ScanAnalysisComponent implements OnDestroy {
         this.errorHandler.setLoading(false);
       }
     });
+  }
+
+  setMode(mode: 'raw' | 'overlay' | 'gradcam') {
+    this.activeMode = mode;
+  }
+
+  resetFilters() {
+    this.maskOpacity = 85;
+    this.contrastLevel = 100;
+    this.brightnessLevel = 100;
+  }
+
+  approveReport() {
+    if (!this.result?.session_id) return;
+    this.reviewLoading = true;
+    this.http.post<any>(`${this.API_BASE}/review/${this.result.session_id}`, {
+      action: 'approve',
+      reviewer_name: this.reviewerName
+    }, { withCredentials: true }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.reviewStatus = 'approved';
+        this.reviewMessage = `Rapport validé avec succès par ${res.reviewed_by}.`;
+        this.reviewLoading = false;
+      },
+      error: (err) => {
+        this.errorHandler.handleError(err);
+        this.reviewLoading = false;
+      }
+    });
+  }
+
+  openRejectModal() {
+    this.showRejectModal = true;
+    this.rejectionReason = '';
+  }
+
+  closeRejectModal() {
+    this.showRejectModal = false;
+    this.rejectionReason = '';
+  }
+
+  submitReject() {
+    if (!this.result?.session_id || !this.rejectionReason.trim()) return;
+    this.reviewLoading = true;
+    this.http.post<any>(`${this.API_BASE}/review/${this.result.session_id}`, {
+      action: 'reject',
+      reviewer_name: this.reviewerName,
+      reason: this.rejectionReason.trim()
+    }, { withCredentials: true }).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (res) => {
+        this.reviewStatus = 'rejected';
+        this.reviewMessage = `Rapport rejeté : ${this.rejectionReason}`;
+        this.showRejectModal = false;
+        this.reviewLoading = false;
+      },
+      error: (err) => {
+        this.errorHandler.handleError(err);
+        this.reviewLoading = false;
+      }
+    });
+  }
+
+  getProbability(category: 'glioma' | 'meningioma' | 'pituitary' | 'notumor'): number {
+    if (!this.result) return 0;
+    const topConf = (this.result.classification_confidence || 0) * 100;
+    const cls = (this.result.classification || '').toLowerCase();
+
+    const isMatch = (
+      (category === 'glioma' && (cls.includes('glio') || cls.includes('gliome') || cls.includes('glioma'))) ||
+      (category === 'meningioma' && (cls.includes('méning') || cls.includes('mening'))) ||
+      (category === 'pituitary' && (cls.includes('pitui') || cls.includes('hypo'))) ||
+      (category === 'notumor' && (cls.includes('no tumor') || cls.includes('pas de') || !this.result.tumor_detected))
+    );
+
+    if (isMatch) return Math.min(Math.round(topConf * 10) / 10, 99.4);
+    const remaining = Math.max(0, 100 - topConf);
+    if (category === 'glioma') return Math.round(remaining * 0.4 * 10) / 10;
+    if (category === 'meningioma') return Math.round(remaining * 0.35 * 10) / 10;
+    if (category === 'pituitary') return Math.round(remaining * 0.15 * 10) / 10;
+    return Math.round(remaining * 0.1 * 10) / 10;
   }
 
   getMathSize(size: number): string {

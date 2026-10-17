@@ -5,9 +5,14 @@ Responsibilities:
   1. Extract quantitative tumor features (area, diameter, intensity)
   2. Determine approximate anatomical location
   3. Map classification to clinical grading
-  4. Generate a structured diagnostic report
+  4. Generate a structured radiology report (Indication / Technique / Résultats /
+     Interprétation / Conclusion / Recommandations)
 
 Adapted for the BRISC 2025 dataset (4 classes: Glioma, Meningioma, Pituitary, No Tumor).
+
+Design principle: everything deterministic (header, measurements, fallback,
+disclaimer) is produced in Python; the LLM only writes the
+narrative text.
 """
 
 from __future__ import annotations
@@ -16,10 +21,24 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from typing import Optional
 import numpy as np
-import torch
 from loguru import logger
 from scipy.spatial.distance import pdist
 from agents.vision import VisionResult, TumorRegion
+
+REPORT_VERSION = "2.2-BRISC"
+
+DISCLAIMER = (
+    "*Compte rendu généré avec assistance d'intelligence artificielle. "
+    "Il ne constitue pas un diagnostic et doit être validé par un médecin "
+    "avant toute décision clinique.*"
+)
+
+TECHNIQUE_TEXT = (
+    "IRM cérébrale, séquence pondérée T1, analyse 2D. "
+    "Injection de produit de contraste : non renseignée. "
+    "Analyse assistée par IA (segmentation et classification automatiques)."
+)
+
 
 @dataclass
 class TumorFeatures:
@@ -35,6 +54,7 @@ class TumorFeatures:
     t1_mean_intensity: float = 0.0
     t1_std_intensity: float = 0.0
 
+
 @dataclass
 class DiagnosticReport:
     """Structured diagnostic report."""
@@ -49,11 +69,11 @@ class DiagnosticReport:
     clinical_summary: str
     recommendations: list[str]
     flags: list[str]
-    icd11_codes: list[str] = field(default_factory=list)
-    report_version: str = "2.1-BRISC"
+    report_version: str = REPORT_VERSION
 
     def to_dict(self) -> dict:
         return asdict(self)
+
 
 class DiagnosticAgent:
     BRAIN_QUADRANTS = {
@@ -75,6 +95,9 @@ class DiagnosticAgent:
         self.rag_system = rag_system
         self.dialogue_agent = dialogue_agent
 
+    # ──────────────────────────────────────────────────────────────────────
+    # Feature extraction
+    # ──────────────────────────────────────────────────────────────────────
     def extract_features(self, vision_result: VisionResult) -> TumorFeatures:
         features = TumorFeatures()
         if not vision_result.tumor_detected:
@@ -92,9 +115,12 @@ class DiagnosticAgent:
             total_area_mm2 += region.area_mm2
         features.tumor_area_px = total_area_px
         features.tumor_area_mm2 = total_area_mm2
-        
+
         features.total_image_area_px = segmentation.size
-        features.tumor_ratio = features.tumor_area_px / features.total_image_area_px if features.total_image_area_px > 0 else 0
+        features.tumor_ratio = (
+            features.tumor_area_px / features.total_image_area_px
+            if features.total_image_area_px > 0 else 0
+        )
 
         tumor_mask = segmentation > 0
         if tumor_mask.any():
@@ -103,14 +129,21 @@ class DiagnosticAgent:
             tumor_coords_mm = tumor_coords.astype(float) * actual_spacing
 
             if len(tumor_coords_mm) > 1:
-                sample = tumor_coords_mm[np.random.choice(len(tumor_coords_mm), min(5000, len(tumor_coords_mm)), replace=False)]
+                sample = tumor_coords_mm[
+                    np.random.choice(len(tumor_coords_mm), min(5000, len(tumor_coords_mm)), replace=False)
+                ]
                 features.max_diameter_mm = float(pdist(sample).max())
 
             centroid = tumor_coords.mean(axis=0)
-            features.centroid_mm = tuple(centroid[i] * spacing[i] for i in range(min(len(centroid), len(spacing))))
+            features.centroid_mm = tuple(
+                centroid[i] * spacing[i] for i in range(min(len(centroid), len(spacing)))
+            )
             features.location_description = self.determine_location(tumor_mask, segmentation.shape)
 
-            intensity_values = image[tumor_mask] if image.ndim == tumor_mask.ndim else image[:, tumor_mask].mean(axis=0)
+            intensity_values = (
+                image[tumor_mask] if image.ndim == tumor_mask.ndim
+                else image[:, tumor_mask].mean(axis=0)
+            )
             features.t1_mean_intensity = float(intensity_values.mean())
             features.t1_std_intensity = float(intensity_values.std())
 
@@ -125,11 +158,65 @@ class DiagnosticAgent:
                 return name
         return "région centrale"
 
+    # ──────────────────────────────────────────────────────────────────────
+    # Deterministic helpers
+    # ──────────────────────────────────────────────────────────────────────
+    @staticmethod
+    def build_header(patient_id: str) -> str:
+        """Administrative header, generated in Python (never by the LLM)."""
+        now = datetime.now(timezone.utc)
+        return (
+            "# COMPTE RENDU D'IRM CÉRÉBRALE\n"
+            f"**Patient :** {patient_id} | "
+            f"**Date :** {now:%d/%m/%Y %H:%M} UTC | "
+            f"**Version :** {REPORT_VERSION}\n\n"
+        )
+
+    @staticmethod
+    def build_recommendations(vision_result: VisionResult, features: Optional[TumorFeatures]) -> tuple[str, list[str]]:
+        """Return (conclusion sentence, prioritised list of recommendations)."""
+        if not vision_result.tumor_detected:
+            return (
+                "Examen sans processus expansif décelable (analyse 2D, séquence T1 seule).",
+                ["Poursuite de la surveillance clinique habituelle."],
+            )
+
+        large = bool(features and features.max_diameter_mm > 40)
+        conclusion = (
+            f"Processus expansif compatible avec : {vision_result.tumor_class}"
+            + (" (lésion volumineuse > 40 mm)." if large else ".")
+        )
+        recs = []
+        if large:
+            recs.append("Avis neurochirurgical urgent (lésion > 40 mm).")
+        else:
+            recs.append("Avis neurochirurgical spécialisé.")
+        recs.append("IRM cérébrale complète avec injection (FLAIR, T2, diffusion, perfusion).")
+        recs.append("Corrélation histopathologique indispensable pour confirmation du grade.")
+        return conclusion, recs
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Report generation
+    # ──────────────────────────────────────────────────────────────────────
     def generate_report(self, vision_result: VisionResult, clinical_notes: str = "", patient_history_context: str = "") -> DiagnosticReport:
         features = self.extract_features(vision_result)
         flags = []
 
         if not vision_result.tumor_detected:
+            conclusion, recs = self.build_recommendations(vision_result, None)
+            summary = (
+                self.build_header(vision_result.patient_id)
+                + "## INDICATION\nNon renseignée.\n\n"
+                + f"## TECHNIQUE\n{TECHNIQUE_TEXT}\n\n"
+                + "## RÉSULTATS\nAbsence de processus expansif intracrânien décelable. "
+                  "Parenchyme cérébral d'aspect normal sur les coupes analysées.\n\n"
+                + "## INTERPRÉTATION\nAucune lésion tumorale détectée par l'analyse automatique. "
+                  "Les limites de l'analyse (coupes 2D, séquence T1 seule) ne permettent pas "
+                  "d'exclure une lésion non visible sur cette séquence.\n\n"
+                + f"## CONCLUSION\n{conclusion}\n\n"
+                + "## RECOMMANDATIONS\n" + "\n".join(f"- {r}" for r in recs)
+                + f"\n\n{DISCLAIMER}"
+            )
             return DiagnosticReport(
                 patient_id=vision_result.patient_id,
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -139,8 +226,8 @@ class DiagnosticAgent:
                 classification_confidence=1.0,
                 classification_probabilities={},
                 who_grade=None,
-                clinical_summary="## CONCLUSION\nExamen normal. Absence de masse tumorale intracrânienne décelable.",
-                recommendations=[],
+                clinical_summary=summary,
+                recommendations=recs,
                 flags=[],
             )
 
@@ -155,6 +242,8 @@ class DiagnosticAgent:
             clinical_notes, patient_history_context
         )
 
+        _, recs = self.build_recommendations(vision_result, features)
+
         return DiagnosticReport(
             patient_id=vision_result.patient_id,
             timestamp=datetime.now(timezone.utc).isoformat(),
@@ -165,46 +254,78 @@ class DiagnosticAgent:
             classification_probabilities=vision_result.tumor_class_probabilities,
             who_grade=clinical_grade,
             clinical_summary=clinical_summary,
-            recommendations=[],
+            recommendations=recs,
             flags=flags,
-            icd11_codes=[],
         )
 
-    # ── System prompt (optimized for Gemma-3 1B-IT — concise & directive) ──
-    REPORT_SYSTEM_PROMPT = (
-        "Vous etes un neuroradiologue senior. Redigez un rapport IRM structure "
-        "et factuel en francais. Utilisez uniquement les donnees fournies.\n"
-        "Regles :\n"
-        "- Terminologie medicale rigoureuse\n"
-        "- Pas de salutation ni introduction polie\n"
-        "- Citez les mesures numeriques exactes\n"
-        "- Si confiance < 85%, mentionnez un diagnostic differentiel\n"
-        "- Integrez les connaissances RAG fournies"
-    )
+    # ── System prompt : compte rendu de radiologie hospitalier ──
+    REPORT_SYSTEM_PROMPT = """Vous êtes médecin radiologue spécialisé en neuroradiologie. Vous rédigez le compte rendu \
+d'une IRM cérébrale à partir des résultats d'un système d'analyse assistée par intelligence artificielle \
+(segmentation et classification automatiques). Ce compte rendu sera versé au dossier médical et relu par un clinicien.
 
-    # ── Report template (few-shot anchor for output format) ──
-    REPORT_TEMPLATE = """## 1. SYNTHESE DES OBSERVATIONS
-{clinical_notes_section}
-## 2. ANALYSE MORPHOMETRIQUE ET LOCALISATION
-{morphometry_section}
-## 3. INTERPRETATION ET GRADATION OMS
-{interpretation_section}
-## 4. CONCLUSION ET RECOMMANDATIONS
-{conclusion_section}"""
+PRINCIPES MÉDICO-LÉGAUX
+- Vous ne disposez que des données fournies. Toute information absente (antécédents, injection de produit de \
+contraste, comparaison avec un examen antérieur, signes associés tels qu'œdème péri-lésionnel, effet de masse, \
+engagement, hydrocéphalie, prise de contraste) est écrite « non renseigné » ou « non évaluable ». Ne rien déduire, \
+ne rien extrapoler.
+- Les mesures sont reprises à l'identique : valeurs, unités et pourcentages inchangés.
+- Le diagnostic provient d'un algorithme. Utilisez un langage de probabilité (« compatible avec », « en faveur de », \
+« évoque », « ne permet pas d'exclure »). Aucune affirmation de certitude. La confirmation histopathologique est \
+requise pour tout grade OMS.
+- Aucune prescription médicamenteuse ni schéma thérapeutique. Seuls des examens complémentaires, des avis \
+spécialisés et un suivi peuvent être proposés.
 
-    REPORT_EXAMPLE = """## 1. SYNTHESE DES OBSERVATIONS
-Patient sans antecedents notables. IRM cerebrale realisee pour exploration d'une lesion suspectee.
-## 2. ANALYSE MORPHOMETRIQUE ET LOCALISATION
-Processus expansif intraparenchymateux de la region anterieure droite.
-Surface : 1247.3 mm2 | Diametre maximal : 42.1 mm | Ratio tumoral : 8.2%
-## 3. INTERPRETATION ET GRADATION OMS
-Classification : Gliome (Confiance IA : 93.2%)
-Grade OMS estime : Grade II-IV (Necessite confirmation histopathologique)
-## 4. CONCLUSION ET RECOMMANDATIONS
-Diagnostique : Gliome suspecte. Consultation neurochirurgicale urgente recommandee.
-IRM de perfusion souhaitee pour evaluation du grade."""
+CONDUITE DU RAISONNEMENT
+- Si la confiance du modèle est inférieure à 85 % : indiquez qu'elle est modérée et formulez au moins un diagnostic \
+différentiel pertinent, avec l'argument radiologique ou épidémiologique qui le soutient.
+- Si l'absence de tumeur est rapportée : conclure à un examen sans processus expansif décelable, en précisant les \
+limites de l'analyse (coupes 2D, séquence T1 seule).
+- Les connaissances de référence (RAG) sont à intégrer dans l'interprétation sous forme de synthèse. Ne pas les \
+recopier, ne pas citer de scores de similarité ni de noms de fichiers.
 
+STYLE ET FORMAT
+- Français médical, registre d'un compte rendu hospitalier : phrases courtes, voix neutre, sans formule de politesse, \
+sans introduction, sans commentaire sur votre propre démarche.
+- Respectez exactement les sections de l'exemple ci-dessous, dans cet ordre, avec ces titres, en Markdown.
+- CONCLUSION : synthèse en deux phrases maximum. RECOMMANDATIONS : liste à puces classée par priorité.
+- Terminez par la mention réglementaire figurant dans l'exemple."""
+
+    # Exemple FICTIF : toutes les valeurs sont volontairement inventées
+    REPORT_EXAMPLE = """## INDICATION
+Exploration d'une lésion cérébrale suspectée. Antécédents : non renseignés.
+
+## TECHNIQUE
+IRM cérébrale, séquence pondérée T1, analyse 2D. Injection de produit de contraste : non renseignée. \
+Analyse assistée par IA (segmentation et classification automatiques).
+
+## RÉSULTATS
+**Lésion :** processus expansif de la région antérieure droite.
+- Dimensions : surface 1247.3 mm2, diamètre maximal 42.1 mm, ratio tumoral 8.2 %
+- Signal T1 : moyenne 118.4 (σ 21.7)
+**Éléments associés :** œdème péri-lésionnel, effet de masse et prise de contraste non évaluables dans ces données.
+
+## INTERPRÉTATION
+Aspect compatible avec un gliome (confiance IA : 93.2 %). Grade OMS estimé II à IV. Les gliomes diffus de l'adulte \
+sont les tumeurs primitives intra-axiales les plus fréquentes ; la gradation repose sur l'analyse histologique et \
+moléculaire.
+
+## CONCLUSION
+Volumineux processus expansif antérieur droit (> 40 mm), compatible avec un gliome. Gradation non possible en imagerie T1 seule.
+
+## RECOMMANDATIONS
+- Avis neurochirurgical rapide, en raison de la taille de la lésion.
+- IRM cérébrale complète avec injection (FLAIR, T2, diffusion, perfusion).
+- Confirmation histopathologique et moléculaire.
+
+*Compte rendu généré avec assistance d'intelligence artificielle. Il ne constitue pas un diagnostic et doit être \
+validé par un médecin avant toute décision clinique.*"""
+
+    # ──────────────────────────────────────────────────────────────────────
+    # LLM summary
+    # ──────────────────────────────────────────────────────────────────────
     def generate_llm_summary(self, vision_result, features, clinical_grade, flags, clinical_notes, history) -> str:
+
+        header = self.build_header(vision_result.patient_id)
 
         # ── RAG Context ──
         rag_context = ""
@@ -232,112 +353,120 @@ IRM de perfusion souhaitee pour evaluation du grade."""
         if clinical_notes:
             notes_section = f"Notes cliniques : {clinical_notes.strip()}\n"
         if history:
-            notes_section += f"Antecedents : {history.strip()}\n"
+            notes_section += f"Antécédents : {history.strip()}\n"
         if not notes_section:
-            notes_section = "Aucun antecedent ni note clinique fourni.\n"
+            notes_section = "Non renseignée.\n"
         if flags:
             notes_section += f"**Alertes** : {'; '.join(flags)}\n"
 
         # ── Morphometry ──
         if vision_result.tumor_detected and features:
             morphometry = (
-                f"Processus expansif detecte.\n"
-                f"Surface : {features.tumor_area_mm2:.1f} mm2 | "
-                f"Diametre maximal : {features.max_diameter_mm:.1f} mm | "
-                f"Ratio tumoral : {features.tumor_ratio:.1%}\n"
-                f"Localisation : {features.location_description}\n"
-                f"Intensite T1 moyenne : {features.t1_mean_intensity:.1f} "
-                f"(sigma : {features.t1_std_intensity:.1f})\n"
+                f"**Lésion :** processus expansif, région {features.location_description}.\n"
+                f"- Dimensions : surface {features.tumor_area_mm2:.1f} mm2, "
+                f"diamètre maximal {features.max_diameter_mm:.1f} mm, "
+                f"ratio tumoral {features.tumor_ratio:.1%}\n"
+                f"- Signal T1 : moyenne {features.t1_mean_intensity:.1f} "
+                f"(σ {features.t1_std_intensity:.1f})\n"
+                f"**Éléments associés :** non renseignés dans les données.\n"
             )
             if features.max_diameter_mm > 40:
-                morphometry += "**Volumineux** : diametre > 40 mm, evaluation urgente recommandee.\n"
+                morphometry += "Lésion volumineuse (> 40 mm).\n"
         else:
-            morphometry = "Aucun processus expansif detecte. Parenchyme cerebral d'aspect normal.\n"
+            morphometry = "Aucun processus expansif détecté. Parenchyme cérébral d'aspect normal.\n"
 
         # ── Interpretation ──
         conf = vision_result.tumor_class_confidence
-        interpretation = f"Classification : {vision_result.tumor_class} (Confiance IA : {conf:.1%})\n"
-        interpretation += f"Grade OMS estime : {clinical_grade}\n"
+        interpretation = f"Classification : {vision_result.tumor_class} (confiance IA : {conf:.1%})\n"
+        interpretation += f"Grade OMS estimé : {clinical_grade}\n"
 
-        # Probabilities for top classes
         if vision_result.tumor_class_probabilities:
             sorted_probs = sorted(
                 vision_result.tumor_class_probabilities.items(),
                 key=lambda x: x[1], reverse=True
             )
             probs_str = " | ".join(f"{cls}={p:.1%}" for cls, p in sorted_probs)
-            interpretation += f"Probabilites : {probs_str}\n"
+            interpretation += f"Probabilités : {probs_str}\n"
 
-        # Differential diagnosis if low confidence
         if conf < 0.85:
             interpretation += (
-                "**Confiance IA moderee (< 85%)** : diagnostic differentiel a envisager. "
-                "Correlation histopathologique forteement recommandee.\n"
+                "**Confiance IA modérée (< 85 %)** : diagnostic différentiel à envisager. "
+                "Corrélation histopathologique fortement recommandée.\n"
             )
 
-        # ── Conclusion ──
-        conclusion_parts = []
-        if vision_result.tumor_detected:
-            conclusion_parts.append(f"Diagnostique : {vision_result.tumor_class} detecte.")
-        else:
-            conclusion_parts.append("Examen normal. Absence de processus expansif detecte.")
+        # ── Conclusion & recommendations (deterministic) ──
+        conclusion_text, recs = self.build_recommendations(vision_result, features)
+        recs_text = "\n".join(f"- {r}" for r in recs)
+        clean_conclusion = f"Conclusion : {conclusion_text}\nRecommandations :\n{recs_text}\n"
 
-        conclusion = "\n".join(conclusion_parts) + "\n"
-
-        # ── RAG enrichment ──
+        # ── RAG context for LLM prompt only ──
+        llm_conclusion = clean_conclusion
         if rag_context:
-            conclusion += (
-                "\nReferences cliniques RAG (integrez les informations pertinentes "
-                "ci-dessus dans le rapport) :\n" + rag_context + "\n"
+            llm_conclusion += (
+                "\nConnaissances cliniques de référence (à intégrer de manière synthétique "
+                "dans l'interprétation) :\n" + rag_context + "\n"
             )
 
         # ── Build messages ──
         system_msg = (
             f"{self.REPORT_SYSTEM_PROMPT}\n\n"
-            f"Structure du rapport (respectez ce format) :\n"
-            f"{self.REPORT_TEMPLATE}\n\n"
-            f"Exemple de rapport (calquez ce style) :\n"
+            f"Exemple de rapport (respectez cette structure et ce style) :\n"
             f"{self.REPORT_EXAMPLE}"
         )
 
         user_msg = (
-            f"Redigez le rapport pour le patient {vision_result.patient_id}.\n\n"
-            f"--- DONNEES STRUCTUREES ---\n"
-            f"## 1. Contexte\n{notes_section}\n"
-            f"## 2. Morphometrie\n{morphometry}\n"
-            f"## 3. Classification\n{interpretation}\n"
-            f"## 4. Elements de conclusion\n{conclusion}\n"
-            f"--- FIN DONNEES ---\n\n"
-            f"Redigez maintenant le rapport complet en respectant la structure."
+            f"Rédigez le compte rendu pour le patient {vision_result.patient_id}.\n\n"
+            f"--- DONNÉES STRUCTURÉES ---\n"
+            f"## Indication\n{notes_section}\n"
+            f"## Résultats\n{morphometry}\n"
+            f"## Interprétation\n{interpretation}\n"
+            f"## Éléments de conclusion\n{llm_conclusion}\n"
+            f"--- FIN DONNÉES ---\n\n"
+            f"Rédigez maintenant le compte rendu complet en respectant strictement la structure. "
+            f"Les valeurs de l'exemple sont fictives : ne les réutilisez pas."
         )
-    
+
         messages = [
             {"role": "system", "content": system_msg},
             {"role": "user", "content": user_msg}
         ]
 
-        inputs = self.dialogue_agent.tokenizer.apply_chat_template(
-            messages, return_tensors="pt", add_generation_prompt=True, return_dict=True
-        )
-        if hasattr(self.dialogue_agent.model, "device"):
-            inputs = {k: v.to(self.dialogue_agent.model.device) for k, v in inputs.items()}
-
-        with torch.no_grad():
-            outputs = self.dialogue_agent.model.generate(
-                **inputs,
-                max_new_tokens=768,
-                temperature=0.25,
-                do_sample=True,
-                repetition_penalty=1.15,
-                pad_token_id=self.dialogue_agent.tokenizer.pad_token_id or self.dialogue_agent.tokenizer.eos_token_id,
-            )
-
-        summary = self.dialogue_agent.tokenizer.decode(
-            outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        fallback_summary = (
+            header
+            + f"## INDICATION\n{notes_section}\n"
+            + f"## TECHNIQUE\n{TECHNIQUE_TEXT}\n\n"
+            + f"## RÉSULTATS\n{morphometry}\n"
+            + f"## INTERPRÉTATION\n{interpretation}\n"
+            + f"## CONCLUSION\n{conclusion_text}\n\n"
+            + f"## RECOMMANDATIONS\n{recs_text}\n\n"
+            + DISCLAIMER
         ).strip()
 
-        # Strip RAG metrics line if leaked into output
-        summary = re.sub(r'\[RAG Metrics:.*?\]', '', summary).strip()
+        if not self.llm_report_enabled or not self.dialogue_agent:
+            return fallback_summary
 
-        return summary
+        try:
+            if hasattr(self.dialogue_agent, "generate_chat"):
+                summary = self.dialogue_agent.generate_chat(
+                    messages=messages,
+                    temperature=0.2,
+                )
+            else:
+                summary = self.dialogue_agent.chat(user_msg)
 
+            # Strip RAG metrics line if leaked into output
+            summary = re.sub(r'\[RAG Metrics:.*?\]', '', summary).strip()
+
+            # Drop any preamble before the first section heading
+            first_heading = re.search(r"^##\s", summary, flags=re.MULTILINE)
+            if first_heading:
+                summary = summary[first_heading.start():]
+
+            # Guarantee the regulatory disclaimer, whatever the model did
+            if "validé par un médecin" not in summary:
+                summary = summary.rstrip() + "\n\n" + DISCLAIMER
+
+            return header + summary
+        except Exception as e:
+            logger.warning(f"LLM summary generation failed: {e}. Falling back to structured summary.")
+            return fallback_summary

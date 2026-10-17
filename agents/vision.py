@@ -72,14 +72,14 @@ class VisionAgent:
         """Load segmentation and classification models (both 2D)."""
         device = self.settings.inference.device
 
-        # --- Segmentation model (2D AttentionUnet) ---
+        # --- Segmentation model (2D Vision Transformer U-Net / SwinUNETR) ---
         self.segmentation_model = SegmentationModel(
-            spatial_dims=2,
+            encoder_name=self.settings.model.seg_encoder_name,
             in_channels=3,
             out_channels=2,
             device=device,
         )
-        weights_path = self.settings.paths.models_dir / "segmentation.pth"
+        weights_path = self.settings.paths.models_dir / self.settings.model.seg_weights_name
         if not weights_path.exists():
             logger.warning(f"2D Segmentation weights not found at {weights_path}")
         else:
@@ -91,7 +91,7 @@ class VisionAgent:
             num_classes=4,
         ).to(device if torch.cuda.is_available() else "cpu")
 
-        weights_path = self.settings.paths.models_dir / "classification.pth"
+        weights_path = self.settings.paths.models_dir / "efficientnet.pth"
         if not weights_path.exists():
             logger.warning(f"Classifier weights not found at {weights_path}")
         else:
@@ -176,7 +176,7 @@ class VisionAgent:
         segmentation_probs = None
 
         if self.segmentation_model is not None:
-            preds, probs = self.segmentation_model.predict_with_probabilities(input_tensor)
+            preds, probs = self.segmentation_model.predict_probs(input_tensor)
             segmentation_mask = preds.squeeze().cpu().numpy()
             segmentation_probs = probs.squeeze().cpu().numpy()
 

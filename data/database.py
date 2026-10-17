@@ -97,6 +97,8 @@ class ScanRecord(Base):
     max_diameter_mm = Column(Float, nullable=True)
     tumor_location = Column(String(255), nullable=True)
     clinical_summary = Column(Text, nullable=True)
+    image_path = Column(String(500), nullable=True)
+    file_hash = Column(String(64), nullable=True)
     review_status = Column(String(50), default="pending_review")
     reviewed_by = Column(String(100), nullable=True)
     reviewed_at = Column(DateTime, nullable=True)
@@ -183,7 +185,7 @@ class Consultation(Base):
 
 # ── Database engine setup ─────────────────────────────────────────────
 
-def create_database_engine() -> tuple:
+def init_engine() -> tuple:
     """
     Create SQLAlchemy engine and session factory for MySQL.
 

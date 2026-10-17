@@ -76,7 +76,7 @@ class AgentRegistry:
                 embedding_model=rag_model,
                 persistent=qdrant_persistent,
             )
-            n_indexed = registry.rag_system.index_system_knowledge()
+            n_indexed = registry.rag_system.index_system()
             total = registry.rag_system.get_collection_count()
             logger.info(
                 f"RAG system initialised: {n_indexed} new system chunks, "
@@ -105,21 +105,21 @@ class AgentRegistry:
 
 
 # ─── Module-level registry (lazy, replaced during app startup) ───
-_registry: Optional[AgentRegistry] = None
+app_registry: Optional[AgentRegistry] = None
 
 
 def get_registry() -> AgentRegistry:
     """Get the current agent registry."""
-    global _registry
-    if _registry is None:
-        _registry = AgentRegistry.create()
-    return _registry
+    global app_registry
+    if app_registry is None:
+        app_registry = AgentRegistry.create()
+    return app_registry
 
 
 def set_registry(registry: AgentRegistry) -> None:
     """Set the agent registry (called at app startup)."""
-    global _registry
-    _registry = registry
+    global app_registry
+    app_registry = registry
 
 
 # ─── Node functions (use registry instead of global singletons) ───

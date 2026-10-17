@@ -12,14 +12,14 @@ from sqlalchemy.orm import sessionmaker
 from loguru import logger
 from config.settings import get_settings
 
-_engine = None
-_session_factory = None
+engine = None
+session_factory = None
 
 
 def get_engine():
     """Get or create the shared SQLAlchemy engine."""
-    global _engine
-    if _engine is None:
+    global engine
+    if engine is None:
         settings = get_settings()
         db_url = settings.db.url
         if not db_url:
@@ -29,16 +29,16 @@ def get_engine():
                 "MYSQL_DATABASE are set in .env"
             )
         logger.info("Creating shared MySQL engine")
-        _engine = create_engine(db_url, echo=False, pool_pre_ping=True)
-    return _engine
+        engine = create_engine(db_url, echo=False, pool_pre_ping=True)
+    return engine
 
 
 def get_session_factory():
     """Get or create the shared session factory."""
-    global _session_factory
-    if _session_factory is None:
-        _session_factory = sessionmaker(bind=get_engine())
-    return _session_factory
+    global session_factory
+    if session_factory is None:
+        session_factory = sessionmaker(bind=get_engine())
+    return session_factory
 
 
 def init_database():

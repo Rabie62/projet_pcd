@@ -10,6 +10,7 @@ from agents.graph_state import MedicalGraphState
 from agents.safety import AuditEntry
 from data.loader import BRISCDataLoader, BRISCPatient
 from data.patient_store import PatientStore
+import numpy as np
 
 
 class ControllerAgent:
@@ -66,7 +67,7 @@ class ControllerAgent:
 
         # Inject patient history context if patient_id is provided
         if patient_id:
-            history_context = self.patient_store.format_history_for_prompt(
+            history_context = self.patient_store.format_history(
                 patient_id
             )
             if history_context:
@@ -84,6 +85,9 @@ class ControllerAgent:
 
         final_state = self.graph.invoke(initial_state)
         self.sessions[session_id] = final_state
+
+        # Archive scan image and report to data/records/
+        img_path, scan_hash = self.save_artifacts(session_id, final_state)
 
         # Set dialogue context if a report was generated
         if final_state.get("diagnostic_report"):
@@ -111,6 +115,8 @@ class ControllerAgent:
                 review_status=final_state.get(
                     "review_status", "pending_review"
                 ),
+                image_path=img_path,
+                file_hash=scan_hash,
             )
             logger.info(
                 f"[{session_id}] Scan auto-linked to patient ID {patient_id}"
@@ -182,7 +188,7 @@ class ControllerAgent:
             raise FileNotFoundError(f"Image not found: {image_path}")
 
         loader = BRISCDataLoader(image_path.parent)
-        patient = loader.load_patient_from_path(image_path)
+        patient = loader.load_path(image_path)
         return self.analyze_patient(
             patient,
             patient_id=patient_id,
@@ -384,3 +390,44 @@ class ControllerAgent:
         )
 
         return session
+
+    def save_artifacts(self, session_id: str, state: MedicalGraphState) -> tuple[Optional[str], Optional[str]]:
+        """Archive scan image and clinical report to data/records/patients/{patient_id}/{session_id}/."""
+        try:
+            patient_id = state.get("patient_id") or "unassigned"
+            rec_dir = self.settings.paths.records_dir / "patients" / str(patient_id) / session_id
+            rec_dir.mkdir(parents=True, exist_ok=True)
+
+            vision_result = state.get("vision_result")
+            report = state.get("diagnostic_report")
+
+            img_path = None
+            scan_hash = None
+            if vision_result and vision_result.preprocessed_image is not None:
+                img_file = rec_dir / "scan.png"
+                from PIL import Image
+                import hashlib
+                arr = vision_result.preprocessed_image
+                if hasattr(arr, "numpy"):
+                    arr = arr.numpy()
+                if arr.ndim == 3 and arr.shape[0] in (1, 3):
+                    arr = np.transpose(arr, (1, 2, 0))
+                arr = (np.clip(arr, 0, 1) * 255).astype(np.uint8)
+                if arr.ndim == 3 and arr.shape[-1] == 1:
+                    arr = arr.squeeze(-1)
+                Image.fromarray(arr).save(img_file)
+                img_path = str(img_file)
+                with open(img_file, "rb") as f:
+                    scan_hash = hashlib.sha256(f.read()).hexdigest()
+
+            if report:
+                rep_file = rec_dir / "report.json"
+                with open(rep_file, "w", encoding="utf-8") as f:
+                    import json
+                    json.dump(report.to_dict(), f, indent=2, ensure_ascii=False)
+
+            logger.info(f"[{session_id}] Record archived to {rec_dir}")
+            return img_path, scan_hash
+        except Exception as err:
+            logger.warning(f"[{session_id}] Failed to archive record: {err}")
+            return None, None

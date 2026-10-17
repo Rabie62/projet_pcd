@@ -176,11 +176,11 @@ class KnowledgeRAG:
         )
 
         if not exists:
-            self.create_medical_collection()
+            self.init_collection()
         else:
             logger.info(f"Qdrant collection exists: {self.COLLECTION_NAME}")
 
-    def create_medical_collection(self) -> None:
+    def init_collection(self) -> None:
         """Create the medical knowledge collection with correct parameters."""
         self.qdrant_client.create_collection(
             collection_name=self.COLLECTION_NAME,
@@ -193,7 +193,7 @@ class KnowledgeRAG:
 
     # ── System knowledge indexing ─────────────────────────────────────
 
-    def index_system_knowledge(self) -> int:
+    def index_system(self) -> int:
         """
         Index the built-in knowledge files (guidelines, tumor types,
         clinical knowledge). Only indexes if not already present.
@@ -212,7 +212,7 @@ class KnowledgeRAG:
 
         chunks = []
         chunks.extend(self.load_json_knowledge())
-        chunks.extend(self.load_markdown_knowledge())
+        chunks.extend(self.load_markdown())
 
         if not chunks:
             logger.warning("No system knowledge chunks found.")
@@ -675,7 +675,7 @@ class KnowledgeRAG:
 
         return chunks
 
-    def load_markdown_knowledge(self) -> list[dict]:
+    def load_markdown(self) -> list[dict]:
         """Load and chunk Markdown knowledge files."""
         chunks = []
 

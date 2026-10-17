@@ -99,7 +99,7 @@ class BRISCVisualizer:
                     base_img = (base_img - base_img.min()) / (base_img.max() - base_img.min() + 1e-8)
                 
                 axes[i].imshow(base_img, cmap="gray" if base_img.ndim == 2 else None)
-                overlay = self._create_segmentation_overlay(data)
+                overlay = self.create_overlay(data)
                 axes[i].imshow(overlay)
                 
             axes[i].set_title(title, color="white", fontsize=12)
@@ -112,7 +112,45 @@ class BRISCVisualizer:
         buf.seek(0)
         return buf.read()
 
-    def generate_gradcam_overlay(
+    def segmentation_overlay(
+        self,
+        mri_image: np.ndarray,
+        pred_mask: Optional[np.ndarray] = None,
+        alpha: float = 0.6,
+    ) -> bytes:
+        """Generate standalone 2D MRI slice with AI segmentation overlay (single image)."""
+        fig, ax = plt.subplots(figsize=(6, 6), dpi=self.dpi)
+        fig.patch.set_facecolor("black")
+
+        if mri_image.ndim == 3 and mri_image.shape[0] == 3:
+            base_img = mri_image.transpose(1, 2, 0)
+        else:
+            base_img = mri_image
+
+        if base_img.max() > 1.0 or base_img.min() < 0.0:
+            base_img = (base_img - base_img.min()) / (base_img.max() - base_img.min() + 1e-8)
+
+        ax.imshow(base_img, cmap="gray" if base_img.ndim == 2 else None)
+
+        if pred_mask is not None and np.any(pred_mask > 0):
+            overlay = self.create_overlay(pred_mask, alpha_mult=alpha)
+            ax.imshow(overlay)
+            try:
+                m = pred_mask.squeeze()
+                if m.ndim == 2 and np.any(m > 0):
+                    ax.contour(m, levels=[0.5], colors=['#ff3b5c'], linewidths=1.5)
+            except Exception:
+                pass
+
+        ax.axis("off")
+        plt.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight", facecolor="black", pad_inches=0)
+        plt.close(fig)
+        buf.seek(0)
+        return buf.read()
+
+    def gradcam_overlay(
         self,
         mri_image: np.ndarray,
         gradcam_map: np.ndarray,
@@ -141,11 +179,15 @@ class BRISCVisualizer:
         buf.seek(0)
         return buf.read()
 
-    def _create_segmentation_overlay(self, mask_2d: np.ndarray, alpha_mult: float = 0.6) -> np.ndarray:
+    def create_overlay(self, mask_2d: np.ndarray, alpha_mult: float = 0.6) -> np.ndarray:
         """Helper to create an RGBA overlay from a segmentation slice."""
+        if mask_2d is None:
+            return np.zeros((1, 1, 4))
+        if mask_2d.ndim > 2:
+            mask_2d = mask_2d.squeeze()
         overlay = np.zeros((*mask_2d.shape, 4))
         for label, color in BRISC_COLORS.items():
-            pixels = (mask_2d == label)
+            pixels = (mask_2d == label) | (mask_2d > 0)
             if np.any(pixels):
                 c = list(color)
                 c[3] = alpha_mult

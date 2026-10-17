@@ -1,7 +1,7 @@
 """
-ResNet-18 Tumor Classifier for BRISC 2025 Dataset.
+EfficientNet-V2-S Tumor Classifier for BRISC 2025 Dataset.
 4-class classification: Glioma, Meningioma, No Tumor, Pituitary.
-Achieves ~98% accuracy on the test set.
+Achieves ~98% accuracy and macro F1 on the test set.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ CLASS_NAMES = {0: "Glioma", 1: "Meningioma", 2: "No Tumor", 3: "Pituitary"}
 
 class TumorClassifier(nn.Module):
     """
-    ResNet-18 for brain tumor classification (4 classes).
+    EfficientNet-V2-S for brain tumor classification (4 classes).
     """
 
     CLASS_NAMES = CLASS_NAMES
@@ -26,22 +26,19 @@ class TumorClassifier(nn.Module):
         self,
         in_channels: int = 3,
         num_classes: int = 4,
+        backbone: str = "efficientnet_v2_s",
     ):
         super().__init__()
         self.num_classes = num_classes
-        
-        # Load resnet18 (weights=None because we load our own)
-        self.model = models.resnet18(weights=None)
-        
-        # Modify first conv layer if in_channels != 3
+        self.backbone_name = "efficientnet_v2_s"
+
+        self.model = models.efficientnet_v2_s(weights=None)
         if in_channels != 3:
-            self.model.conv1 = nn.Conv2d(
-                in_channels, 64, kernel_size=7, stride=2, padding=3, bias=False
+            self.model.features[0][0] = nn.Conv2d(
+                in_channels, 24, kernel_size=3, stride=2, padding=1, bias=False
             )
-            
-        # Replace the final fully connected layer
-        num_ftrs = self.model.fc.in_features
-        self.model.fc = nn.Sequential(
+        num_ftrs = self.model.classifier[1].in_features
+        self.model.classifier = nn.Sequential(
             nn.Dropout(0.4),
             nn.Linear(num_ftrs, num_classes)
         )
@@ -55,13 +52,33 @@ class TumorClassifier(nn.Module):
         state = torch.load(path, map_location="cpu", weights_only=True)
         
         # Handle cases where weights are saved as a state_dict or a full model
-        if isinstance(state, dict):
-            self.load_state_dict(state)
+        state_dict = state if isinstance(state, dict) else state.state_dict()
+
+        # Auto-detect architecture from state dict keys
+        keys = list(state_dict.keys())
+        is_eff = any("features." in k for k in keys)
+        if is_eff and "efficientnet" not in self.backbone_name:
+            self.backbone_name = "efficientnet_v2_s"
+            self.model = models.efficientnet_v2_s(weights=None)
+            num_ftrs = self.model.classifier[1].in_features
+            self.model.classifier = nn.Sequential(
+                nn.Dropout(0.4),
+                nn.Linear(num_ftrs, self.num_classes)
+            )
+
+        # Handle nested model. prefix if saved from outer class
+        if any(k.startswith("model.") for k in keys) and not any(k.startswith("model.model.") for k in keys):
+            # Model wrapper matches self.model
+            self.load_state_dict(state_dict)
         else:
-            self.load_state_dict(state.state_dict())
+            try:
+                self.load_state_dict(state_dict)
+            except RuntimeError:
+                # If weights were saved directly from self.model
+                self.model.load_state_dict(state_dict)
             
         self.eval()
-        logger.info(f"Loaded classifier weights from {path}")
+        logger.info(f"Loaded classifier weights from {path} (backbone: {self.backbone_name})")
 
     @torch.no_grad()
     def predict(

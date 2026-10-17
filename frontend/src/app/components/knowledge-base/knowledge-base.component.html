@@ -1,49 +1,96 @@
-<div class="grid-2">
-  <div class="glass-panel">
+<div class="rag-page-container">
+  <!-- Left Column: Overview & Ingestion -->
+  <div class="glass-panel rag-card">
     <div class="card-header">
-      <h2>RAG Knowledge Base</h2>
+      <div class="header-title-group">
+        <h2 class="rag-section-title">Base de Connaissances RAG</h2>
+        <span class="rag-section-sub">Indexation vectorielle biomédicale &amp; Protocoles cliniques</span>
+      </div>
     </div>
-    <div class="card-body" style="display: flex; flex-direction: column; gap: 1.5rem;">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
-          <div class="text-muted" style="font-size: 0.85rem;">Total Chunks Indexed</div>
-          <div style="font-size: 1.5rem; font-weight: bold;">{{ status.total_chunks || 0 }}</div>
+    
+    <div class="rag-card-body">
+      <!-- High-contrast Light Stat Cards -->
+      <div class="stats-grid">
+        <div class="stat-card chunks-card">
+          <div class="stat-meta">
+            <span class="stat-label">Total Chunks Indexés</span>
+            <span class="stat-badge">Vector DB</span>
+          </div>
+          <div class="stat-value text-primary">{{ status.total_chunks || 0 }}</div>
+          <span class="stat-subtext">Embeddings BioLinkBERT 768-d</span>
         </div>
-        <div style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px;">
-          <div class="text-muted" style="font-size: 0.85rem;">Qdrant Status</div>
-          <div style="font-size: 1.5rem; font-weight: bold;" [class]="status.available ? 'text-primary' : 'danger'">
+
+        <div class="stat-card qdrant-card">
+          <div class="stat-meta">
+            <span class="stat-label">Statut Qdrant</span>
+            <span class="pulse-indicator" [class.online]="status.available" [class.offline]="!status.available"></span>
+          </div>
+          <div class="stat-value" [class.status-online]="status.available" [class.status-offline]="!status.available">
             {{ status.available ? "ONLINE" : "OFFLINE" }}
           </div>
+          <span class="stat-subtext">{{ status.available ? 'Cluster opérationnel & synchronisé' : 'Serveur vectoriel inaccessible' }}</span>
         </div>
       </div>
       
-      <form (submit)="handleUpload($event, fileInput)" style="display: flex; flex-direction: column; gap: 0.75rem;">
-        <div style="display: flex; gap: 1rem; align-items: center;">
-          <input #fileInput type="file" name="file" accept=".pdf,.txt,.md" style="flex: 1;" />
-          <button type="submit" [disabled]="uploading">
-            <lucide-icon [name]="UploadCloudIcon" [size]="18"></lucide-icon> {{ uploading ? 'Indexation...' : 'Indexer le document' }}
-          </button>
-        </div>
-      </form>
+      <!-- Document Upload / Ingestion Area -->
+      <div class="upload-section">
+        <h3 class="upload-title">Ajouter un document clinique</h3>
+        <p class="upload-desc">Indexez de nouveaux guides de pratique clinique, articles PubMed ou protocoles OMS (PDF, TXT, MD - max 10 Mo).</p>
+        
+        <form (submit)="handleUpload($event, fileInput)" class="upload-form">
+          <div class="file-input-wrapper">
+            <input #fileInput type="file" name="file" accept=".pdf,.txt,.md" class="rag-file-input" />
+            <button type="submit" [disabled]="uploading" class="btn-index-doc">
+              <lucide-icon [name]="UploadCloudIcon" [size]="18"></lucide-icon>
+              <span>{{ uploading ? 'Indexation vectorielle...' : 'Indexer le document' }}</span>
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
-  <div class="glass-panel" style="height: 70vh; overflow-y: auto;">
+  <!-- Right Column: Indexed Literature List -->
+  <div class="glass-panel rag-card doc-list-panel">
     <div class="card-header">
-      <h2>Indexed Literature</h2>
+      <div class="header-title-group">
+        <h2 class="rag-section-title">Littérature Indexée</h2>
+        <span class="rag-section-sub">{{ docs.length }} document{{ docs.length > 1 ? 's' : '' }} prêt{{ docs.length > 1 ? 's' : '' }} pour la recherche sémantique</span>
+      </div>
     </div>
-    <div class="card-body" style="display: flex; flex-direction: column; gap: 1rem;">
-      <div *ngIf="docs.length === 0" class="text-muted">No external documents uploaded yet.</div>
+
+    <div class="rag-card-body doc-list-body">
+      <div *ngIf="loading && docs.length === 0" class="empty-state">
+        <span class="loading-spinner"></span>
+        <p>Chargement des documents indexés...</p>
+      </div>
+
+      <div *ngIf="!loading && docs.length === 0" class="empty-state">
+        <lucide-icon [name]="FileTextIcon" [size]="36" class="text-dim"></lucide-icon>
+        <p class="empty-title">Aucun document externe indexé pour l'instant</p>
+        <span class="empty-sub">Importez un guide clinique ou protocole de neuro-oncologie ci-contre.</span>
+      </div>
       
-      <div *ngFor="let doc of docs" style="display: flex; align-items: center; justify-content: space-between; background: rgba(15,23,42,0.6); padding: 1rem; border-radius: 8px; border: 1px solid var(--glass-border);">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-          <lucide-icon [name]="FileTextIcon" class="text-primary" [size]="24"></lucide-icon>
-          <div>
-            <div style="font-weight: 600;">{{ doc.filename }}</div>
-            <div class="text-muted" style="font-size: 0.8rem;">Uploaded by {{ doc.uploaded_by }} • {{ doc.chunk_count }} Chunks</div>
+      <div *ngFor="let doc of docs" class="doc-card-item">
+        <div class="doc-item-left">
+          <div class="doc-icon-box">
+            <lucide-icon [name]="FileTextIcon" [size]="20" class="doc-icon"></lucide-icon>
+          </div>
+          <div class="doc-details">
+            <div class="doc-filename" [title]="doc.filename">{{ doc.filename }}</div>
+            <div class="doc-meta">
+              <span>Par <strong>{{ doc.uploaded_by }}</strong></span>
+              <span class="meta-separator">&bull;</span>
+              <span class="chunk-badge">{{ doc.chunk_count }} chunks</span>
+            </div>
           </div>
         </div>
-        <button class="danger" style="padding: 0.5rem;" (click)="handleDelete(doc.document_id)">
+
+        <button 
+          type="button" 
+          class="btn-delete-doc" 
+          (click)="handleDelete(doc.document_id)" 
+          title="Supprimer ce document de l'index">
           <lucide-icon [name]="Trash2Icon" [size]="16"></lucide-icon>
         </button>
       </div>

@@ -107,7 +107,6 @@ class AnalysisResponse(BaseModel):
     tumor_regions: list[TumorRegionResponse] = []
     clinical_summary: str = ""
     recommendations: list[str] = []
-    icd11_codes: list[str] = []
     safety_check: Optional[SafetyCheckResponse] = None
     review_status: Optional[str] = None
     disclaimer: str = ""

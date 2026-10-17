@@ -11,7 +11,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
+import java.io.InputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Enumeration;
@@ -125,7 +128,61 @@ public class GatewayController {
     }
 
     @PostMapping(value = "/api/v1/chat/stream", produces = "text/event-stream")
-    public ResponseEntity<byte[]> proxyStream(HttpServletRequest request, @RequestBody(required = false) byte[] body) throws URISyntaxException {
-        return proxyRequest(request, body);
+    public ResponseEntity<StreamingResponseBody> proxyStream(
+            HttpServletRequest request,
+            @RequestBody(required = false) byte[] body) throws URISyntaxException {
+
+        String requestUri = request.getRequestURI();
+        String queryString = request.getQueryString();
+        String urlString = pythonServiceUrl + requestUri;
+        if (queryString != null) {
+            urlString += "?" + queryString;
+        }
+
+        URI uri = new URI(urlString);
+
+        HttpHeaders headers = new HttpHeaders();
+        Enumeration<String> headerNames = request.getHeaderNames();
+        while (headerNames.hasMoreElements()) {
+            String headerName = headerNames.nextElement();
+            if (!headerName.equalsIgnoreCase("host")
+                    && !headerName.equalsIgnoreCase("content-length")
+                    && !headerName.equalsIgnoreCase("transfer-encoding")) {
+                headers.add(headerName, request.getHeader(headerName));
+            }
+        }
+
+        StreamingResponseBody streamingBody = outputStream -> {
+            restTemplate.execute(
+                uri,
+                HttpMethod.POST,
+                clientHttpRequest -> {
+                    clientHttpRequest.getHeaders().addAll(headers);
+                    if (body != null && body.length > 0) {
+                        clientHttpRequest.getBody().write(body);
+                    }
+                },
+                clientHttpResponse -> {
+                    try (InputStream is = clientHttpResponse.getBody()) {
+                        byte[] buffer = new byte[1024];
+                        int bytesRead;
+                        while ((bytesRead = is.read(buffer)) != -1) {
+                            outputStream.write(buffer, 0, bytesRead);
+                            outputStream.flush();
+                        }
+                    } catch (IOException e) {
+                        // Connection closed by client or upstream finished
+                    }
+                    return null;
+                }
+            );
+        };
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "text/event-stream")
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache")
+                .header(HttpHeaders.CONNECTION, "keep-alive")
+                .header("X-Accel-Buffering", "no")
+                .body(streamingBody);
     }
 }
