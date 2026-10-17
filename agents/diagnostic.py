@@ -92,7 +92,7 @@ class DiagnosticAgent:
 
     def __init__(self, llm_report_enabled: bool = True, rag_system=None, dialogue_agent=None):
         self.llm_report_enabled = llm_report_enabled
-        self.rag_system = rag_system
+        self.rag_system = None
         self.dialogue_agent = dialogue_agent
 
     # ──────────────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ class DiagnosticAgent:
         if vision_result.tumor_class_confidence < 0.85:
             flags.append("Confiance IA modérée")
 
-        # GÉNÉRATION DU RAPPORT (LLM avec contexte RAG)
+        # GÉNÉRATION DU RAPPORT (LLM)
         clinical_summary = self.generate_llm_summary(
             vision_result, features, clinical_grade, flags,
             clinical_notes, patient_history_context
@@ -280,8 +280,6 @@ CONDUITE DU RAISONNEMENT
 différentiel pertinent, avec l'argument radiologique ou épidémiologique qui le soutient.
 - Si l'absence de tumeur est rapportée : conclure à un examen sans processus expansif décelable, en précisant les \
 limites de l'analyse (coupes 2D, séquence T1 seule).
-- Les connaissances de référence (RAG) sont à intégrer dans l'interprétation sous forme de synthèse. Ne pas les \
-recopier, ne pas citer de scores de similarité ni de noms de fichiers.
 
 STYLE ET FORMAT
 - Français médical, registre d'un compte rendu hospitalier : phrases courtes, voix neutre, sans formule de politesse, \
@@ -326,27 +324,6 @@ validé par un médecin avant toute décision clinique.*"""
     def generate_llm_summary(self, vision_result, features, clinical_grade, flags, clinical_notes, history) -> str:
 
         header = self.build_header(vision_result.patient_id)
-
-        # ── RAG Context ──
-        rag_context = ""
-        rag_metrics = {}
-        if self.rag_system and self.rag_system.available:
-            chunks = self.rag_system.retrieve_for_findings(
-                classification=vision_result.tumor_class,
-                tumor_detected=vision_result.tumor_detected,
-                confidence=vision_result.tumor_class_confidence,
-            )
-            if chunks:
-                rag_context = self.rag_system.format_context(chunks, include_scores=False)
-                rag_metrics = {
-                    "chunks_retrieved": len(chunks),
-                    "avg_score": sum(c.score for c in chunks) / len(chunks),
-                    "sources": list(set(c.source for c in chunks)),
-                }
-                logger.info(
-                    f"[RAG] Injected {len(chunks)} chunks into report "
-                    f"(avg score: {rag_metrics['avg_score']:.3f})"
-                )
 
         # ── Clinical notes & history ──
         notes_section = ""
@@ -399,13 +376,8 @@ validé par un médecin avant toute décision clinique.*"""
         recs_text = "\n".join(f"- {r}" for r in recs)
         clean_conclusion = f"Conclusion : {conclusion_text}\nRecommandations :\n{recs_text}\n"
 
-        # ── RAG context for LLM prompt only ──
+        # ── Conclusion for LLM prompt ──
         llm_conclusion = clean_conclusion
-        if rag_context:
-            llm_conclusion += (
-                "\nConnaissances cliniques de référence (à intégrer de manière synthétique "
-                "dans l'interprétation) :\n" + rag_context + "\n"
-            )
 
         # ── Build messages ──
         system_msg = (
@@ -453,9 +425,6 @@ validé par un médecin avant toute décision clinique.*"""
                 )
             else:
                 summary = self.dialogue_agent.chat(user_msg)
-
-            # Strip RAG metrics line if leaked into output
-            summary = re.sub(r'\[RAG Metrics:.*?\]', '', summary).strip()
 
             # Drop any preamble before the first section heading
             first_heading = re.search(r"^##\s", summary, flags=re.MULTILINE)

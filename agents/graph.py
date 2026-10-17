@@ -88,7 +88,7 @@ class AgentRegistry:
         )
         registry.diagnostic = DiagnosticAgent(
             llm_report_enabled=llm_report_enabled,
-            rag_system=registry.rag_system,
+            rag_system=None,
             dialogue_agent=registry.dialogue,
         )
         registry.safety = SafetyAgent(resolved_settings)
